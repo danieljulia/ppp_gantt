@@ -474,13 +474,14 @@
             <div class="header">
               <span class="muted">Task</span>
               <button v-if="state.isEditing" class="add-task-btn-header" @click="addMainTask" title="Add task">
-                <svg viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M0 0 L6 6 M6 0 L0 6" stroke="currentColor" stroke-width="1"/>
+                <svg viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(45deg);">
+                  <path d="M3 0V6M0 3H6" stroke="currentColor" stroke-width="1"/>
                 </svg>
               </button>
             </div>
             <div class="item" v-for="t in state.tasks" :key="t.id">
-              <input type="text" :value="t.name" @change="e=>renameMainTask(t,e)" :disabled="!state.isEditing" />
+              <input v-if="state.isEditing" type="text" :value="t.name" @change="e=>renameMainTask(t,e)" />
+              <span v-else class="task-name-text">{{ t.name }}</span>
               <div v-if="state.isEditing" class="row-actions">
                 <button class="btn" title="Add subtask" @click="()=>addSubtask(t)">+</button>
                 <button class="btn" title="Delete row" @click="()=>deleteMainTask(t)">×</button>
