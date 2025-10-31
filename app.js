@@ -102,6 +102,7 @@
         months: [],
         selectedSubtaskId: null,
         editingUserId: null,
+        isEditing: false,
       })
 
       function computeRowWidth(task) {
@@ -207,12 +208,14 @@
       }
 
       async function onProjectNameChange(e) {
+        if (!state.isEditing) return
         const name = e.target.innerText.trim() || 'untitled'
         await api.updateProject({ id: state.project.id, name })
         state.project.name = name
       }
 
       async function onProjectDateChange(e) {
+        if (!state.isEditing) return
         const start = e.target.value
         await api.updateProject({ id: state.project.id, start_date: start })
         state.project.start_date = start
@@ -220,27 +223,32 @@
       }
 
       async function addMainTask() {
+        if (!state.isEditing) return
         const res = await api.addMainTask({ project_id: state.project.id, name: 'Main task' })
         await loadProject()
       }
 
       async function renameMainTask(task, e) {
+        if (!state.isEditing) return
         await api.updateMainTask({ id: task.id, name: e.target.value })
         task.name = e.target.value
       }
 
       async function deleteMainTask(task) {
+        if (!state.isEditing) return
         if (!confirm('Delete main task and all its subtasks?')) return
         await api.deleteMainTask({ id: task.id })
         await loadProject()
       }
 
       async function addSubtask(task) {
+        if (!state.isEditing) return
         await api.addSubtask({ main_task_id: task.id, duration_days: 7 })
         await loadProject()
       }
 
       async function updateSubtaskField(sub, field, value) {
+        if (!state.isEditing) return
         const payload = { id: sub.id }
         payload[field] = value
         await api.updateSubtask(payload)
@@ -249,6 +257,7 @@
       }
 
       async function deleteSubtask(sub) {
+        if (!state.isEditing) return
         if (!confirm('Delete subtask?')) return
         await api.deleteSubtask({ id: sub.id })
         await loadProject()
@@ -256,6 +265,7 @@
 
       // Users
       async function addUser() {
+        if (!state.isEditing) return
         const name = prompt('User name?')
         if (!name) return
         // Figma-inspired color palette (pastel, light, vivid colors)
@@ -273,11 +283,13 @@
       }
 
       async function updateUser(user, field, value) {
+        if (!state.isEditing) return
         await api.updateUser({ id: user.id, [field]: value })
         user[field] = value
       }
       
       function startEditingUser(userId) {
+        if (!state.isEditing) return
         // Only start editing if not already editing this user
         if (state.editingUserId !== userId) {
           state.editingUserId = userId
@@ -306,6 +318,7 @@
       let clickStartPos = null
       let clickedSubtaskId = null
       function onBarMouseDown(e, task, sub, subIndex) {
+        if (!state.isEditing) return
         const isResizer = e.target.classList.contains('resizer')
         const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON'
         
@@ -396,6 +409,14 @@
         })
       })
 
+      function toggleEditing() {
+        state.isEditing = !state.isEditing
+        if (!state.isEditing) {
+          state.selectedSubtaskId = null
+          state.editingUserId = null
+        }
+      }
+
       return {
         state,
         computeRowWidth,
@@ -417,6 +438,7 @@
         onBarMouseDown,
         bestTextColor,
         selectSubtask,
+        toggleEditing,
         startEditingUser,
         stopEditingUser,
         DAY_PX,
@@ -427,32 +449,39 @@
       <div>
         <div class="header">
           <div class="topbar">
-            <div class="project-name" contenteditable="true" @blur="onProjectNameChange">{{ state.project ? state.project.name : 'loading…' }}</div>
+            <div class="project-name" :contenteditable="state.isEditing" @blur="onProjectNameChange">{{ state.project ? state.project.name : 'loading…' }}</div>
             <label class="muted">Start</label>
-            <input v-if="state.project" type="date" :value="state.project.start_date" @change="onProjectDateChange" />
-            <button class="btn" @click="addMainTask">+ Main task</button>
+            <input v-if="state.project" type="date" :value="state.project.start_date" @change="onProjectDateChange" :disabled="!state.isEditing" />
           </div>
           <div class="users">
             <span class="muted">Users</span>
             <template v-for="u in state.users" :key="u.id">
-              <span class="user-pill" :class="{ editing: state.editingUserId === u.id }" @click="startEditingUser(u.id)">
-                <input v-if="state.editingUserId === u.id" type="color" :value="u.color" @change="e=>updateUser(u,'color',e.target.value)" @click.stop />
+              <span class="user-pill" :class="{ editing: state.editingUserId === u.id }" @click="state.isEditing && startEditingUser(u.id)">
+                <input v-if="state.isEditing && state.editingUserId === u.id" type="color" :value="u.color" @change="e=>updateUser(u,'color',e.target.value)" @click.stop />
                 <span v-else class="user-color-preview" :style="{ background: u.color }"></span>
-                <input v-if="state.editingUserId === u.id" type="text" :value="u.name" @change="e=>updateUser(u,'name',e.target.value)" @blur="stopEditingUser" @keyup.enter="stopEditingUser" @click.stop />
+                <input v-if="state.isEditing && state.editingUserId === u.id" type="text" :value="u.name" @change="e=>updateUser(u,'name',e.target.value)" @blur="stopEditingUser" @keyup.enter="stopEditingUser" @click.stop />
                 <span v-else class="user-name">{{ u.name }}</span>
-                <button class="btn delete-user-btn" @click.stop="()=>deleteUser(u)">×</button>
+                <button v-if="state.isEditing" class="btn delete-user-btn" @click.stop="()=>deleteUser(u)">×</button>
               </span>
             </template>
-            <button class="btn" @click="addUser">+ Add user</button>
+            <button v-if="state.isEditing" class="btn" @click="addUser">+ Add user</button>
+            <button class="btn" @click="toggleEditing">{{ state.isEditing ? 'Done' : 'Edit' }}</button>
           </div>
         </div>
 
         <div class="gantt" v-if="state.project">
           <div class="left-col">
-            <div class="header muted">Task</div>
+            <div class="header">
+              <span class="muted">Task</span>
+              <button v-if="state.isEditing" class="add-task-btn-header" @click="addMainTask" title="Add task">
+                <svg viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M0 0 L6 6 M6 0 L0 6" stroke="currentColor" stroke-width="1"/>
+                </svg>
+              </button>
+            </div>
             <div class="item" v-for="t in state.tasks" :key="t.id">
-              <input type="text" :value="t.name" @change="e=>renameMainTask(t,e)" />
-              <div class="row-actions">
+              <input type="text" :value="t.name" @change="e=>renameMainTask(t,e)" :disabled="!state.isEditing" />
+              <div v-if="state.isEditing" class="row-actions">
                 <button class="btn" title="Add subtask" @click="()=>addSubtask(t)">+</button>
                 <button class="btn" title="Delete row" @click="()=>deleteMainTask(t)">×</button>
               </div>
@@ -472,26 +501,26 @@
             <div class="rowline" v-for="t in state.tasks" :key="'line-'+t.id">
               <div class="timeline" :style="{ width: Math.max(computeRowWidth(t), state.daysHorizon * DAY_PX) + 'px' }">
                 <template v-for="(s, i) in t.subtasks" :key="s.id">
-                  <div class="bar" :class="{ active: state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
+                  <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
                     <!-- Name: text in default mode, input in active mode -->
-                    <span v-if="state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
+                    <span v-if="!state.isEditing || state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
                     <input v-else class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" @click.stop @focus.stop />
                     
                     <!-- User select: only visible in active mode -->
-                    <select v-if="state.selectedSubtaskId === s.id" class="user-select" :value="s.user_id" @change="e=>updateSubtaskField(s,'user_id', e.target.value ? Number(e.target.value) : null)" @click.stop>
+                    <select v-if="state.isEditing && state.selectedSubtaskId === s.id" class="user-select" :value="s.user_id" @change="e=>updateSubtaskField(s,'user_id', e.target.value ? Number(e.target.value) : null)" @click.stop>
                       <option :value="">Unassigned</option>
                       <option v-for="u in state.users" :key="u.id" :value="u.id">{{ u.name }}</option>
                     </select>
                     
                     <!-- Days input: only visible in active mode -->
-                    <input v-if="state.selectedSubtaskId === s.id" class="days-input" type="number" min="1" :value="s.duration_days" @change="e=>updateSubtaskField(s,'duration_days', Math.max(1, Number(e.target.value)))" @click.stop />
+                    <input v-if="state.isEditing && state.selectedSubtaskId === s.id" class="days-input" type="number" min="1" :value="s.duration_days" @change="e=>updateSubtaskField(s,'duration_days', Math.max(1, Number(e.target.value)))" @click.stop />
                     
                     <!-- Delete button: only visible in active mode -->
-                    <button v-if="state.selectedSubtaskId === s.id" class="btn" @click.stop="()=>deleteSubtask(s)">×</button>
+                    <button v-if="state.isEditing && state.selectedSubtaskId === s.id" class="btn" @click.stop="()=>deleteSubtask(s)">×</button>
                     <div class="resizer" style="cursor: ew-resize;"></div>
                   </div>
                 </template>
-                <button class="btn add-subtask-btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: computeAddButtonLeft(t) + 'px', top: '50%', transform: 'translateY(-50%)' }">+</button>
+                <button v-if="state.isEditing" class="btn add-subtask-btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: computeAddButtonLeft(t) + 'px', top: '50%', transform: 'translateY(-50%)' }">+</button>
               </div>
             </div>
           </div>
