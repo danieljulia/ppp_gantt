@@ -100,6 +100,7 @@
         error: null,
         daysHorizon: 60,
         months: [],
+        weekStartDays: [],
         selectedSubtaskId: null,
         editingUserId: null,
         isEditing: false,
@@ -132,6 +133,23 @@
         const u = state.users.find(u => u.id === userId)
         // lighter default gray when unassigned
         return u ? u.color : '#dcdcdc'
+      }
+
+      function lightenColor(hex, ratio = 0.15) {
+        if (!hex) return '#eeeeee'
+        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+        if (!m) return hex
+        const r = Math.round(parseInt(m[1], 16) + (255 - parseInt(m[1], 16)) * ratio)
+        const g = Math.round(parseInt(m[2], 16) + (255 - parseInt(m[2], 16)) * ratio)
+        const b = Math.round(parseInt(m[3], 16) + (255 - parseInt(m[3], 16)) * ratio)
+        const toHex = (v) => v.toString(16).padStart(2, '0')
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+      }
+
+      function getUserInitial(userId) {
+        const u = state.users.find(u => u.id === userId)
+        if (!u || !u.name) return ''
+        return u.name.charAt(0).toUpperCase()
       }
 
       function computeBarWidthValue(sub) {
@@ -178,6 +196,7 @@
         const start = dayjs(state.project.start_date, 'YYYY-MM-DD')
         const months = []
         const monthMap = new Map()
+        const weekStartDays = []
         
         // Track which days we've covered and group by month
         for (let i = 0; i < state.daysHorizon; i++) {
@@ -196,6 +215,7 @@
           if (isMonday || isFirstDay) {
             const dayOfMonth = d.date()
             monthMap.get(monthKey).weekStarts.add(dayOfMonth)
+            weekStartDays.push(i)
           }
         }
         
@@ -205,6 +225,9 @@
           name: data.name,
           weeks: Array.from(data.weekStarts).sort((a, b) => a - b).map(day => ({ day }))
         }))
+        
+        // Store week start days for vertical lines
+        state.weekStartDays = weekStartDays
       }
 
       async function onProjectNameChange(e) {
@@ -313,10 +336,251 @@
         state.selectedSubtaskId = null
       }
 
-      // Drag-resize and drag-move
+      // Row reordering handlers
+      function onRowDragStart(e, task, taskIndex) {
+        if (!state.isEditing) {
+          e.preventDefault()
+          return false
+        }
+        // Don't start drag if clicking on inputs/buttons
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('.row-actions')) {
+          e.preventDefault()
+          return false
+        }
+        draggingRow = task
+        draggingRowType = 'main_task'
+        draggingRowIndex = taskIndex
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/html', '') // Required for some browsers
+        e.currentTarget.classList.add('dragging')
+      }
+      
+      function onRowDragEnd(e) {
+        e.currentTarget.classList.remove('dragging')
+        draggingRow = null
+        draggingRowType = null
+        draggingRowIndex = null
+      }
+      
+      function onRowDragOver(e, targetTask, targetIndex) {
+        if (!draggingRow || draggingRowType !== 'main_task') return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        
+        const rowElement = e.currentTarget.closest('.gantt-row')
+        if (rowElement) {
+          const rect = rowElement.getBoundingClientRect()
+          const midpoint = rect.top + rect.height / 2
+          if (e.clientY < midpoint) {
+            rowElement.classList.add('drag-over-top')
+            rowElement.classList.remove('drag-over-bottom')
+          } else {
+            rowElement.classList.add('drag-over-bottom')
+            rowElement.classList.remove('drag-over-top')
+          }
+        }
+      }
+      
+      function onRowDragLeave(e) {
+        const rowElement = e.currentTarget.closest('.gantt-row')
+        if (rowElement) {
+          rowElement.classList.remove('drag-over-top', 'drag-over-bottom')
+        }
+      }
+      
+      async function onRowDrop(e, targetTask, targetIndex) {
+        e.preventDefault()
+        if (!draggingRow || draggingRowType !== 'main_task' || draggingRowIndex === null) return
+        
+        const rowElement = e.currentTarget.closest('.gantt-row')
+        if (rowElement) {
+          rowElement.classList.remove('drag-over-top', 'drag-over-bottom')
+        }
+        
+        if (draggingRowIndex === targetIndex) {
+          draggingRow = null
+          draggingRowType = null
+          draggingRowIndex = null
+          return
+        }
+        
+        // Calculate new position
+        const rect = rowElement ? rowElement.getBoundingClientRect() : null
+        const midpoint = rect ? rect.top + rect.height / 2 : null
+        let newIndex = targetIndex
+        if (draggingRowIndex < targetIndex && midpoint && e.clientY < midpoint) {
+          newIndex = targetIndex - 1
+        } else if (draggingRowIndex > targetIndex && midpoint && e.clientY >= midpoint) {
+          newIndex = targetIndex + 1
+        }
+        
+        // Reorder in array
+        const tasks = [...state.tasks]
+        const [movedTask] = tasks.splice(draggingRowIndex, 1)
+        tasks.splice(newIndex, 0, movedTask)
+        
+        // Update positions in backend
+        for (let i = 0; i < tasks.length; i++) {
+          await api.updateMainTask({ id: tasks[i].id, position: i })
+        }
+        
+        // Reload project to get updated order
+        await loadProject()
+        
+        draggingRow = null
+        draggingRowType = null
+        draggingRowIndex = null
+      }
+      
+      // Subtask reordering handlers
+      let subtaskDragStartPos = null
+      let subtaskDragStartTime = null
+      function onSubtaskDragStart(e, task, subtask, subIndex) {
+        if (!state.isEditing) {
+          e.preventDefault()
+          return false
+        }
+        // Don't start drag if clicking on inputs/buttons/resizer
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.closest('.resizer')) {
+          e.preventDefault()
+          return false
+        }
+        
+        // Store initial position and time to detect if this is a real drag vs click
+        subtaskDragStartPos = { x: e.clientX, y: e.clientY }
+        subtaskDragStartTime = Date.now()
+        
+        // Cancel any ongoing horizontal drag
+        if (dragging) {
+          dragging = null
+          window.removeEventListener('mousemove', onMouseMove)
+          window.removeEventListener('mouseup', onMouseUp)
+        }
+        draggingRow = subtask
+        draggingRowType = 'subtask'
+        draggingRowIndex = subIndex
+        draggingRowMainTaskId = task.id
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/html', '')
+        e.currentTarget.classList.add('dragging')
+        e.stopPropagation()
+      }
+      
+      function onSubtaskDragEnd(e) {
+        e.currentTarget.classList.remove('dragging')
+        
+        // If it was just a click (no significant drag), select the subtask
+        let wasClick = false
+        if (subtaskDragStartPos && subtaskDragStartTime) {
+          const dx = Math.abs(e.clientX - subtaskDragStartPos.x)
+          const dy = Math.abs(e.clientY - subtaskDragStartPos.y)
+          const timeElapsed = Date.now() - subtaskDragStartTime
+          // If minimal movement and quick (click-like), treat as click
+          if ((dx < 5 && dy < 5) || (timeElapsed < 200 && dy < 10)) {
+            wasClick = true
+            if (draggingRow) {
+              selectSubtask(draggingRow.id)
+            }
+          }
+          subtaskDragStartPos = null
+          subtaskDragStartTime = null
+        }
+        
+        if (!wasClick) {
+          draggingRow = null
+          draggingRowType = null
+          draggingRowIndex = null
+          draggingRowMainTaskId = null
+        } else {
+          // Still clear dragging state after a short delay to allow click handler
+          setTimeout(() => {
+            draggingRow = null
+            draggingRowType = null
+            draggingRowIndex = null
+            draggingRowMainTaskId = null
+          }, 50)
+        }
+      }
+      
+      function onSubtaskDragOver(e, task, targetSubtask, targetIndex) {
+        if (!draggingRow || draggingRowType !== 'subtask' || draggingRowMainTaskId !== task.id) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+        
+        const barElement = e.currentTarget
+        if (barElement) {
+          const rect = barElement.getBoundingClientRect()
+          const midpoint = rect.left + rect.width / 2
+          if (e.clientX < midpoint) {
+            barElement.classList.add('drag-over-left')
+            barElement.classList.remove('drag-over-right')
+          } else {
+            barElement.classList.add('drag-over-right')
+            barElement.classList.remove('drag-over-left')
+          }
+        }
+      }
+      
+      function onSubtaskDragLeave(e) {
+        const barElement = e.currentTarget
+        if (barElement) {
+          barElement.classList.remove('drag-over-left', 'drag-over-right')
+        }
+      }
+      
+      async function onSubtaskDrop(e, task, targetSubtask, targetIndex) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!draggingRow || draggingRowType !== 'subtask' || draggingRowIndex === null || draggingRowMainTaskId !== task.id) return
+        
+        const barElement = e.currentTarget
+        if (barElement) {
+          barElement.classList.remove('drag-over-left', 'drag-over-right')
+        }
+        
+        if (draggingRowIndex === targetIndex) {
+          draggingRow = null
+          draggingRowType = null
+          draggingRowIndex = null
+          draggingRowMainTaskId = null
+          return
+        }
+        
+        // Calculate new position
+        const rect = barElement ? barElement.getBoundingClientRect() : null
+        const midpoint = rect ? rect.left + rect.width / 2 : null
+        let newIndex = targetIndex
+        if (draggingRowIndex < targetIndex && midpoint && e.clientX < midpoint) {
+          newIndex = targetIndex - 1
+        } else if (draggingRowIndex > targetIndex && midpoint && e.clientX >= midpoint) {
+          newIndex = targetIndex + 1
+        }
+        
+        // Reorder subtasks in array
+        const subtasks = [...task.subtasks]
+        const [movedSubtask] = subtasks.splice(draggingRowIndex, 1)
+        subtasks.splice(newIndex, 0, movedSubtask)
+        
+        // Update positions in backend
+        for (let i = 0; i < subtasks.length; i++) {
+          await api.updateSubtask({ id: subtasks[i].id, position: i })
+        }
+        
+        // Reload project to get updated order
+        await loadProject()
+        
+        draggingRow = null
+        draggingRowType = null
+        draggingRowIndex = null
+        draggingRowMainTaskId = null
+      }
+
+      // Drag-resize and drag-move (for timeline bars)
       let dragging = null
       let clickStartPos = null
       let clickedSubtaskId = null
+      
       function onBarMouseDown(e, task, sub, subIndex) {
         if (!state.isEditing) return
         const isResizer = e.target.classList.contains('resizer')
@@ -332,24 +596,71 @@
         clickStartPos = { x: e.clientX, y: e.clientY }
         clickedSubtaskId = sub.id
         
-        e.preventDefault()
         const startX = e.clientX
+        const startY = e.clientY
         const currentLeft = computeSubtaskLeft(task, subIndex)
         
-        if (isResizer) {
-          // Resize mode
-          const startDays = Number(sub.duration_days)
-          dragging = { mode: 'resize', task, sub, startX, startDays }
-        } else {
-          // Move mode - move entire row
-          const startOffset = Number(task.start_offset_days || 0)
-          dragging = { mode: 'move', task, startX, startOffset, startLeft: currentLeft }
-          // Select subtask when starting to move
-          selectSubtask(sub.id)
+        // Handler to check if this is a horizontal or vertical drag
+        let hasMoved = false
+        const checkDragDirection = (moveEvent) => {
+          if (hasMoved) return
+          const dx = Math.abs(moveEvent.clientX - startX)
+          const dy = Math.abs(moveEvent.clientY - startY)
+          
+          // If vertical movement is significantly more than horizontal, let HTML5 drag handle it
+          if (dy > dx + 5 && dy > 10) {
+            hasMoved = true
+            dragging = null
+            window.removeEventListener('mousemove', checkDragDirection)
+            window.removeEventListener('mousemove', onMouseMove)
+            window.removeEventListener('mouseup', onMouseUp)
+            return
+          }
+          
+          // If horizontal movement is significant, proceed with horizontal drag
+          if (dx > 5) {
+            hasMoved = true
+            e.preventDefault()
+            window.removeEventListener('mousemove', checkDragDirection)
+            
+            if (isResizer) {
+              // Resize mode
+              const startDays = Number(sub.duration_days)
+              dragging = { mode: 'resize', task, sub, startX, startDays }
+            } else {
+              // Move mode - move entire row
+              const startOffset = Number(task.start_offset_days || 0)
+              dragging = { mode: 'move', task, startX, startOffset, startLeft: currentLeft }
+              // Select subtask when starting to move
+              selectSubtask(sub.id)
+            }
+            
+            window.addEventListener('mousemove', onMouseMove)
+            window.addEventListener('mouseup', onMouseUp)
+          }
         }
         
-        window.addEventListener('mousemove', onMouseMove)
-        window.addEventListener('mouseup', onMouseUp)
+        // Start checking drag direction
+        const cleanupCheckDrag = () => {
+          window.removeEventListener('mousemove', checkDragDirection)
+          window.removeEventListener('mouseup', handleMouseUp)
+        }
+        
+        const handleMouseUp = (upEvent) => {
+          cleanupCheckDrag()
+          if (!hasMoved) {
+            // It was just a click, not a drag - select the subtask immediately
+            // Use a small timeout to ensure it fires after any drag events
+            setTimeout(() => {
+              selectSubtask(sub.id)
+            }, 0)
+            clickStartPos = null
+            clickedSubtaskId = null
+          }
+        }
+        
+        window.addEventListener('mousemove', checkDragDirection)
+        window.addEventListener('mouseup', handleMouseUp)
       }
       function onMouseMove(e) {
         if (!dragging) return
@@ -424,6 +735,8 @@
         computeBarWidthValue,
         computeAddButtonLeft,
         colorForUser,
+        lightenColor,
+        getUserInitial,
         onProjectNameChange,
         onProjectDateChange,
         addMainTask,
@@ -441,6 +754,16 @@
         toggleEditing,
         startEditingUser,
         stopEditingUser,
+        onRowDragStart,
+        onRowDragEnd,
+        onRowDragOver,
+        onRowDragLeave,
+        onRowDrop,
+        onSubtaskDragStart,
+        onSubtaskDragEnd,
+        onSubtaskDragOver,
+        onSubtaskDragLeave,
+        onSubtaskDrop,
         DAY_PX,
         WEEK_PX: 7 * DAY_PX, // 7 days * 24px = 168px per week
       }
@@ -493,7 +816,13 @@
             </div>
           </div>
           <div class="gantt-rows">
-            <div class="gantt-row" v-for="t in state.tasks" :key="t.id">
+            <div class="gantt-row" v-for="(t, ti) in state.tasks" :key="t.id"
+                 :draggable="state.isEditing"
+                 @dragstart="(e)=>onRowDragStart(e,t,ti)"
+                 @dragend="onRowDragEnd"
+                 @dragover="(e)=>onRowDragOver(e,t,ti)"
+                 @dragleave="onRowDragLeave"
+                 @drop="(e)=>onRowDrop(e,t,ti)">
               <div class="gantt-row-left">
                 <input v-if="state.isEditing" type="text" :value="t.name" @change="e=>renameMainTask(t,e)" />
                 <span v-else class="task-name-text">{{ t.name }}</span>
@@ -504,11 +833,26 @@
               </div>
               <div class="gantt-row-right">
                 <div class="timeline" :style="{ width: Math.max(computeRowWidth(t), state.daysHorizon * DAY_PX) + 'px' }">
+                  <!-- Week start vertical lines -->
+                  <div v-for="day in state.weekStartDays" :key="'week-' + day" 
+                       class="week-line" 
+                       :style="{ left: (day * DAY_PX) + 'px' }"></div>
                   <template v-for="(s, i) in t.subtasks" :key="s.id">
-                    <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
+                    <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }"
+                         :draggable="state.isEditing && t.subtasks.length > 1"
+                         @dragstart="(e)=>onSubtaskDragStart(e,t,s,i)"
+                         @dragend="onSubtaskDragEnd"
+                         @dragover="(e)=>onSubtaskDragOver(e,t,s,i)"
+                         @dragleave="onSubtaskDragLeave"
+                         @drop="(e)=>onSubtaskDrop(e,t,s,i)"
+                         @mousedown="(e)=>onBarMouseDown(e,t,s,i)"
+                         @click="(e)=>state.isEditing && selectSubtask(s.id)">
                       <!-- Name: text in default mode, input in active mode -->
                       <span v-if="!state.isEditing || state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
                       <input v-else class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" @click.stop @focus.stop />
+                      
+                      <!-- User initial badge: only visible in non-edit mode when user is assigned -->
+                      <span v-if="(!state.isEditing || state.selectedSubtaskId !== s.id) && s.user_id" class="user-initial-badge" :style="{ background: lightenColor(colorForUser(s.user_id), 0.16), color: bestTextColor(lightenColor(colorForUser(s.user_id), 0.16)) }">{{ getUserInitial(s.user_id) }}</span>
                       
                       <!-- User select: only visible in active mode -->
                       <select v-if="state.isEditing && state.selectedSubtaskId === s.id" class="user-select" :value="s.user_id" @change="e=>updateSubtaskField(s,'user_id', e.target.value ? Number(e.target.value) : null)" @click.stop>

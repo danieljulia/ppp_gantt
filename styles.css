@@ -27,6 +27,16 @@ html, body {
   margin-bottom: 12px;
 }
 
+.topbar input[type="date"] {
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 14px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
 .project-name {
   font-size: 20px;
   font-weight: 600;
@@ -90,9 +100,9 @@ html, body {
 .week-cell {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 0 7px 4px 7px;
+  padding: 0 7px 4px 5px;
   border-left: 1px solid #bcbcbc;
   font-weight: 500;
   font-size: 12px;
@@ -212,6 +222,16 @@ html, body {
   align-items: center;
 }
 
+.week-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #bcbcbc;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .bar {
   position: absolute;
   height: var(--bar-height);
@@ -226,6 +246,7 @@ html, body {
   transform: translateY(-50%);
   cursor: move;
   overflow: hidden;
+  z-index: 1;
 }
 .bar input,
 .bar select,
@@ -242,6 +263,19 @@ html, body {
   user-select: none;
   font-weight: 500;
   font-size: 14px;
+}
+.bar .user-initial-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-left: auto;
+  border: 1.5px solid rgba(0,0,0,0.1);
 }
 .bar .name-input {
   background: transparent;
@@ -394,5 +428,41 @@ html, body {
 }
 
 .muted { color: var(--muted); }
+
+/* Drag and drop styles */
+.gantt-row.dragging {
+  opacity: 0.5;
+  cursor: move;
+}
+
+.gantt-row.drag-over-top {
+  border-top: 2px solid var(--accent);
+}
+
+.gantt-row.drag-over-bottom {
+  border-bottom: 2px solid var(--accent);
+}
+
+.bar.dragging {
+  opacity: 0.6;
+  cursor: move;
+  z-index: 10;
+}
+
+.bar.drag-over-left {
+  border-left: 3px solid var(--accent);
+}
+
+.bar.drag-over-right {
+  border-right: 3px solid var(--accent);
+}
+
+.gantt-row[draggable="true"] {
+  cursor: move;
+}
+
+.bar[draggable="true"] {
+  cursor: move;
+}
 
 

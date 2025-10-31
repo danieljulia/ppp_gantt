@@ -126,6 +126,10 @@ try {
                 $stmt = $pdo->prepare('UPDATE main_tasks SET start_offset_days = :o WHERE id = :id');
                 $stmt->execute([':o' => max(0, (int)$input['start_offset_days']), ':id' => $id]);
             }
+            if (isset($input['position'])) {
+                $stmt = $pdo->prepare('UPDATE main_tasks SET position = :p WHERE id = :id');
+                $stmt->execute([':p' => max(0, (int)$input['position']), ':id' => $id]);
+            }
             jsonResponse(['ok' => true]);
             break;
 
@@ -164,6 +168,10 @@ try {
             if (isset($input['duration_days'])) {
                 $d = max(1, (int)$input['duration_days']);
                 $pdo->prepare('UPDATE subtasks SET duration_days = :d WHERE id = :id')->execute([':d' => $d, ':id' => $id]);
+            }
+            if (isset($input['position'])) {
+                $p = max(0, (int)$input['position']);
+                $pdo->prepare('UPDATE subtasks SET position = :p WHERE id = :id')->execute([':p' => $p, ':id' => $id]);
             }
             jsonResponse(['ok' => true]);
             break;
