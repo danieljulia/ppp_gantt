@@ -66,6 +66,11 @@ html, body {
   overflow: hidden;
 }
 
+.ruler-wrapper {
+  position: relative;
+  overflow: visible;
+}
+
 .ruler {
   display: flex;
   border-bottom: 1px solid var(--line);
@@ -91,6 +96,8 @@ html, body {
   font-size: 12px;
   color: var(--fg);
   border-bottom: none;
+  position: relative;
+  z-index: 1;
 }
 
 .month-weeks {
@@ -123,6 +130,7 @@ html, body {
   border-radius: 8px; 
   overflow-x: auto;
   overflow-y: visible;
+  position: relative;
 }
 .gantt-header-row {
   display: flex;
@@ -130,6 +138,7 @@ html, body {
   top: 0;
   z-index: 3;
   background: var(--bg);
+  overflow: visible;
 }
 .gantt-header-left {
   flex: 0 0 260px;
@@ -151,6 +160,8 @@ html, body {
   flex: 1;
   border-bottom: 1px solid var(--line);
   background: var(--bg);
+  overflow: visible;
+  position: relative;
 }
 .gantt-rows {
   display: flex;
@@ -230,6 +241,59 @@ html, body {
   background: #bcbcbc;
   z-index: 0;
   pointer-events: none;
+}
+
+.end-date-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #696969;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.end-date-line-header {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #696969;
+  z-index: 10;
+  pointer-events: none;
+  height: 100%;
+}
+
+.end-date-marker {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 15;
+}
+
+.flag-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--fg);
+  flex-shrink: 0;
+}
+
+.end-date-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
 }
 
 .bar {

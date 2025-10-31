@@ -101,6 +101,10 @@
         daysHorizon: 60,
         months: [],
         weekStartDays: [],
+        actualEndDay: 0,
+        actualEndDayPx: 0,
+        endDate: null,
+        endDateFormatted: null,
         selectedSubtaskId: null,
         editingUserId: null,
         isEditing: false,
@@ -182,12 +186,36 @@
 
       function recomputeHorizon() {
         let maxDays = 30
+        let actualEndDay = 0
+        
         for (const t of state.tasks) {
+          const startOffset = Number(t.start_offset_days || 0)
           const taskDays = t.subtasks.reduce((a, s) => a + Number(s.duration_days || 0), 0)
-          const totalDays = Number(t.start_offset_days || 0) + taskDays
+          const totalDays = startOffset + taskDays
+          
           if (totalDays > maxDays) maxDays = totalDays
+          
+          // Calculate actual end day for this task
+          // For each subtask, calculate its end position: startOffset + cumulative duration + this subtask's duration
+          // Then find the maximum end position across all subtasks
+          let maxEndDay = startOffset
+          let cumulativeDays = 0
+          for (const s of t.subtasks) {
+            const subStartDay = startOffset + cumulativeDays
+            const subEndDay = subStartDay + Number(s.duration_days || 0)
+            if (subEndDay > maxEndDay) {
+              maxEndDay = subEndDay
+            }
+            cumulativeDays += Number(s.duration_days || 0)
+          }
+          
+          if (maxEndDay > actualEndDay) {
+            actualEndDay = maxEndDay
+          }
         }
+        
         state.daysHorizon = Math.max(maxDays, 30)
+        state.actualEndDay = actualEndDay
         computeMonths()
       }
 
@@ -228,6 +256,18 @@
         
         // Store week start days for vertical lines
         state.weekStartDays = weekStartDays
+        
+        // Compute actual end date based on last subtask
+        if (state.actualEndDay > 0) {
+          const endDate = start.add(state.actualEndDay - 1, 'day')
+          state.endDate = endDate.format('YYYY-MM-DD')
+          state.endDateFormatted = endDate.format('MMM D, YYYY')
+          state.actualEndDayPx = state.actualEndDay * DAY_PX
+        } else {
+          state.endDate = null
+          state.endDateFormatted = null
+          state.actualEndDayPx = 0
+        }
       }
 
       async function onProjectNameChange(e) {
@@ -803,13 +843,34 @@
               </button>
             </div>
             <div class="gantt-header-right">
-              <div class="ruler" :style="{ width: (state.daysHorizon * DAY_PX) + 'px' }">
-                <div class="month-section" v-for="(m, mi) in state.months" :key="mi" :style="{ width: (m.weeks.length * WEEK_PX) + 'px' }">
-                  <div class="month-header">{{ m.name }}</div>
-                  <div class="month-weeks">
-                    <div class="week-cell" v-for="(w, wi) in m.weeks" :key="wi" :class="{ 'first-week': wi === 0 }" :style="{ width: WEEK_PX + 'px' }">
-                      {{ w.day }}
+              <div class="ruler-wrapper" :style="{ width: (state.daysHorizon * DAY_PX) + 'px', position: 'relative', minHeight: '50px' }">
+                <div class="ruler" :style="{ width: (state.daysHorizon * DAY_PX) + 'px' }">
+                  <div class="month-section" v-for="(m, mi) in state.months" :key="mi" :style="{ width: (m.weeks.length * WEEK_PX) + 'px' }">
+                    <div class="month-header">{{ m.name }}</div>
+                    <div class="month-weeks">
+                      <div class="week-cell" v-for="(w, wi) in m.weeks" :key="wi" :class="{ 'first-week': wi === 0 }" :style="{ width: WEEK_PX + 'px' }">
+                        {{ w.day }}
+                      </div>
                     </div>
+                  </div>
+                </div>
+                <!-- Final end date line with flag in header - only one flag for entire project -->
+                <div v-if="state.endDate && state.actualEndDayPx > 0" class="end-date-line-header" :style="{ left: state.actualEndDayPx + 'px' }">
+                  <div class="end-date-marker">
+                    <svg class="flag-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <!-- Flag pole -->
+                      <line x1="3" y1="3" x2="3" y2="21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                      <!-- Checkered flag pattern -->
+                      <rect x="4" y="4" width="4" height="4" fill="currentColor"/>
+                      <rect x="12" y="4" width="4" height="4" fill="currentColor"/>
+                      <rect x="8" y="8" width="4" height="4" fill="currentColor"/>
+                      <rect x="16" y="8" width="4" height="4" fill="currentColor"/>
+                      <rect x="4" y="12" width="4" height="4" fill="currentColor"/>
+                      <rect x="12" y="12" width="4" height="4" fill="currentColor"/>
+                      <rect x="8" y="16" width="4" height="4" fill="currentColor"/>
+                      <rect x="16" y="16" width="4" height="4" fill="currentColor"/>
+                    </svg>
+                    <span class="end-date-text">{{ state.endDateFormatted }}</span>
                   </div>
                 </div>
               </div>
@@ -837,6 +898,8 @@
                   <div v-for="day in state.weekStartDays" :key="'week-' + day" 
                        class="week-line" 
                        :style="{ left: (day * DAY_PX) + 'px' }"></div>
+                  <!-- Final end date line (no flag, flag is only in header) -->
+                  <div v-if="state.endDate && state.actualEndDayPx > 0" class="end-date-line" :style="{ left: state.actualEndDayPx + 'px' }"></div>
                   <template v-for="(s, i) in t.subtasks" :key="s.id">
                     <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }"
                          :draggable="state.isEditing && t.subtasks.length > 1"
