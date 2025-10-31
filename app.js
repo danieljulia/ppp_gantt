@@ -309,27 +309,24 @@
           </div>
         </div>
 
-        <div class="grid" v-if="state.project">
-          <div class="row" style="position: sticky; top: 0; z-index: 3; background: var(--bg);">
-            <div class="left muted">Task</div>
-            <div class="right">
-              <div class="ruler" :style="{ width: (state.daysHorizon * DAY_PX) + 'px' }">
-                <div class="cell" v-for="(dl, idx) in state.dayLabels" :key="idx" :class="{ week: dl.isWeekStart }">
-                  {{ dl.text }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="row" v-for="t in state.tasks" :key="t.id">
-            <div class="left">
+        <div class="gantt" v-if="state.project">
+          <div class="left-col">
+            <div class="header muted">Task</div>
+            <div class="item" v-for="t in state.tasks" :key="t.id">
               <input type="text" :value="t.name" @change="e=>renameMainTask(t,e)" />
               <div class="row-actions">
                 <button class="btn" title="Add subtask" @click="()=>addSubtask(t)">+</button>
                 <button class="btn" title="Delete row" @click="()=>deleteMainTask(t)">×</button>
               </div>
             </div>
-            <div class="right">
+          </div>
+          <div class="right-col">
+            <div class="ruler" :style="{ width: (state.daysHorizon * DAY_PX) + 'px' }">
+              <div class="cell" v-for="(dl, idx) in state.dayLabels" :key="idx" :class="{ week: dl.isWeekStart }">
+                {{ dl.text }}
+              </div>
+            </div>
+            <div class="rowline" v-for="t in state.tasks" :key="'line-'+t.id">
               <div class="timeline" :style="{ width: Math.max(computeRowWidth(t), state.daysHorizon * DAY_PX) + 'px' }">
                 <template v-for="(s, i) in t.subtasks" :key="s.id">
                   <div class="bar" :style="{ left: computeSubtaskLeft(t,i)+'px', width: (s.duration_days*DAY_PX)+'px', background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">

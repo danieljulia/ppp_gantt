@@ -85,32 +85,16 @@ html, body {
   width: 100%;
 }
 
-.row {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--line);
-}
+/* New unified layout */
+.gantt { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.left-col { flex: 0 0 260px; border-right: 1px solid var(--line); }
+.left-col .header { height: 28px; display: flex; align-items: center; padding: 0 8px; border-bottom: 1px solid var(--line); }
+.left-col .item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); }
+.left-col .item input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 
-.row .left {
-  flex: 0 0 260px;
-  border-right: 1px solid var(--line);
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.row .left input[type="text"] {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-
-.row .right {
-  position: relative;
-  overflow-x: auto;
-}
+.right-col { position: relative; overflow-x: auto; flex: 1; }
+.right-col .ruler { position: sticky; top: 0; z-index: 2; }
+.right-col .rowline { border-bottom: 1px solid var(--line); }
 
 .timeline {
   position: relative;
