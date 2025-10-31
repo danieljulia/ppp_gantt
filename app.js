@@ -481,6 +481,8 @@
       // Subtask reordering handlers (for the reorder handle only)
       let subtaskDragStartPos = null
       let subtaskDragStartTime = null
+      let subtaskDragOccurred = false
+      let justDraggedSubtaskId = null
       
       function onSubtaskReorderDragStart(e, task, subtask, subIndex) {
         if (!state.isEditing) {
@@ -491,12 +493,19 @@
         // Store initial position and time to detect if this is a real drag vs click
         subtaskDragStartPos = { x: e.clientX, y: e.clientY }
         subtaskDragStartTime = Date.now()
+        subtaskDragOccurred = false // Reset flag
+        justDraggedSubtaskId = null // Reset
         
         // Cancel any ongoing horizontal drag
         if (dragging) {
           dragging = null
           window.removeEventListener('mousemove', onMouseMove)
           window.removeEventListener('mouseup', onMouseUp)
+        }
+        
+        // Deselect the subtask to prevent it from going into edit mode
+        if (state.selectedSubtaskId === subtask.id) {
+          state.selectedSubtaskId = null
         }
         
         draggingRow = subtask
@@ -515,6 +524,25 @@
       }
       
       function onSubtaskDragEnd(e) {
+        // Check if it was an actual drag (not just a click)
+        if (subtaskDragStartPos && draggingRow) {
+          const dx = Math.abs(e.clientX - subtaskDragStartPos.x)
+          const dy = Math.abs(e.clientY - subtaskDragStartPos.y)
+          if (dx > 5 || dy > 5) {
+            subtaskDragOccurred = true
+            justDraggedSubtaskId = draggingRow.id
+            
+            // Prevent any click events on this element for a short time
+            const barElement = document.querySelector(`[data-subtask-id="${draggingRow.id}"]`)
+            if (barElement) {
+              barElement.style.pointerEvents = 'none'
+              setTimeout(() => {
+                barElement.style.pointerEvents = ''
+              }, 250)
+            }
+          }
+        }
+        
         // Remove dragging class from all bars
         const draggingBar = document.querySelector('.bar.dragging')
         if (draggingBar) {
@@ -525,6 +553,12 @@
         // Don't clear here if a drop is about to happen
         subtaskDragStartPos = null
         subtaskDragStartTime = null
+        
+        // Clear the flag after a short delay to prevent click handler from firing
+        setTimeout(() => {
+          subtaskDragOccurred = false
+          justDraggedSubtaskId = null
+        }, 200)
       }
       
       function onSubtaskDragOver(e, task, targetSubtask, targetIndex) {
@@ -557,12 +591,33 @@
       async function onSubtaskDrop(e, task, targetSubtask, targetIndex) {
         e.preventDefault()
         e.stopPropagation()
+        
+        // Mark that a drag occurred to prevent click handler from selecting
+        subtaskDragOccurred = true
+        if (draggingRow) {
+          justDraggedSubtaskId = draggingRow.id
+          
+          // Prevent any click events on this element for a short time
+          const barElement = document.querySelector(`[data-subtask-id="${draggingRow.id}"]`)
+          if (barElement) {
+            barElement.style.pointerEvents = 'none'
+            setTimeout(() => {
+              barElement.style.pointerEvents = ''
+            }, 250)
+          }
+        }
+        
         if (!draggingRow || draggingRowType !== 'subtask' || draggingRowIndex === null || draggingRowMainTaskId !== task.id) {
           // Clear dragging state
           draggingRow = null
           draggingRowType = null
           draggingRowIndex = null
           draggingRowMainTaskId = null
+          // Clear the flag after a short delay
+          setTimeout(() => {
+            subtaskDragOccurred = false
+            justDraggedSubtaskId = null
+          }, 200)
           return
         }
         
@@ -582,6 +637,11 @@
           draggingRowType = null
           draggingRowIndex = null
           draggingRowMainTaskId = null
+          // Clear the flag after a short delay
+          setTimeout(() => {
+            subtaskDragOccurred = false
+            justDraggedSubtaskId = null
+          }, 200)
           return
         }
         
@@ -612,6 +672,12 @@
         draggingRowType = null
         draggingRowIndex = null
         draggingRowMainTaskId = null
+        
+        // Clear the flag after a short delay to prevent click handler from firing
+        setTimeout(() => {
+          subtaskDragOccurred = false
+          justDraggedSubtaskId = null
+        }, 200)
       }
 
       // Drag-resize and drag-move (for timeline bars)
@@ -774,8 +840,8 @@
           // Check if it was a click (not a drag)
           const dx = Math.abs(e.clientX - clickStartPos.x)
           const dy = Math.abs(e.clientY - clickStartPos.y)
-          if (dx < 5 && dy < 5) {
-            // It was a click, select the subtask
+          if (dx < 5 && dy < 5 && clickedSubtaskId !== justDraggedSubtaskId) {
+            // It was a click, select the subtask (only if it wasn't just dragged)
             selectSubtask(clickedSubtaskId)
           }
           clickStartPos = null
@@ -846,6 +912,8 @@
         onSubtaskDragOver,
         onSubtaskDragLeave,
         onSubtaskDrop,
+        subtaskDragOccurred: () => subtaskDragOccurred,
+        justDraggedSubtaskId: () => justDraggedSubtaskId,
         DAY_PX,
         WEEK_PX: 7 * DAY_PX, // 7 days * 24px = 168px per week
       }
@@ -961,7 +1029,7 @@
                     <!-- Drag handle to move all subtasks horizontally (only on first subtask, left of it) -->
                     <div v-if="state.isEditing && i === 0 && t.subtasks.length > 0" 
                          class="row-move-handle"
-                         :style="{ left: ((Number(t.start_offset_days || 0) * DAY_PX) - 14) + 'px' }"
+                         :style="{ left: ((Number(t.start_offset_days || 0) * DAY_PX) - 22) + 'px' }"
                          @mousedown="(e)=>onRowMoveHandleMouseDown(e,t)"
                          @click.stop
                          title="Drag to move all subtasks horizontally">
@@ -975,7 +1043,7 @@
                          @dragleave="onSubtaskDragLeave"
                          @drop="(e)=>onSubtaskDrop(e,t,s,i)"
                          @mousedown="(e)=>onBarMouseDown(e,t,s,i)"
-                         @click="(e)=>state.isEditing && selectSubtask(s.id)">
+                         @click="(e)=>{ if (state.isEditing && s.id !== justDraggedSubtaskId()) { e.stopPropagation(); selectSubtask(s.id) } }">
                       <!-- Drag handle for subtask reordering - inside the bar on the left -->
                       <div v-if="state.isEditing && t.subtasks.length > 1"
                            class="subtask-reorder-handle"
