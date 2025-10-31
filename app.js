@@ -98,7 +98,7 @@
         loading: true,
         error: null,
         daysHorizon: 60,
-        dayLabels: [],
+        months: [],
       })
 
       function computeRowWidth(task) {
@@ -147,18 +147,41 @@
           if (d > maxDays) maxDays = d
         }
         state.daysHorizon = Math.max(maxDays, 30)
-        computeDayLabels()
+        computeMonths()
       }
 
-      function computeDayLabels() {
-        const start = state.project ? dayjs(state.project.start_date, 'YYYY-MM-DD') : dayjs()
-        const labels = []
+      function computeMonths() {
+        if (!state.project) return
+        const start = dayjs(state.project.start_date, 'YYYY-MM-DD')
+        const months = []
+        const monthMap = new Map()
+        
+        // Track which days we've covered and group by month
         for (let i = 0; i < state.daysHorizon; i++) {
           const d = start.add(i, 'day')
-          const isWeekStart = (d.day() === 1) || i === 0 // Monday or first day
-          labels.push({ text: isWeekStart ? d.format('MMM D') : '', isWeekStart })
+          const monthKey = d.format('YYYY-MM')
+          const monthName = d.format('MMMM')
+          
+          if (!monthMap.has(monthKey)) {
+            monthMap.set(monthKey, { name: monthName, weekStarts: new Set() })
+          }
+          
+          // Check if this is the start of a week (Monday, or first day of range)
+          const isMonday = d.day() === 1
+          const isFirstDay = i === 0
+          
+          if (isMonday || isFirstDay) {
+            const dayOfMonth = d.date()
+            monthMap.get(monthKey).weekStarts.add(dayOfMonth)
+          }
         }
-        state.dayLabels = labels
+        
+        // Convert to array format, sorted by date
+        const sortedMonths = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+        state.months = sortedMonths.map(([key, data]) => ({
+          name: data.name,
+          weeks: Array.from(data.weekStarts).sort((a, b) => a - b).map(day => ({ day }))
+        }))
       }
 
       async function onProjectNameChange(e) {
@@ -171,7 +194,7 @@
         const start = e.target.value
         await api.updateProject({ id: state.project.id, start_date: start })
         state.project.start_date = start
-        computeDayLabels()
+        computeMonths()
       }
 
       async function addMainTask() {
@@ -285,6 +308,7 @@
         onBarMouseDown,
         bestTextColor,
         DAY_PX,
+        WEEK_PX: 7 * DAY_PX, // 7 days * 24px = 168px per week
       }
     },
     template: `
@@ -322,8 +346,13 @@
           </div>
           <div class="right-col">
             <div class="ruler" :style="{ width: (state.daysHorizon * DAY_PX) + 'px' }">
-              <div class="cell" v-for="(dl, idx) in state.dayLabels" :key="idx" :class="{ week: dl.isWeekStart }">
-                {{ dl.text }}
+              <div class="month-section" v-for="(m, mi) in state.months" :key="mi" :style="{ width: (m.weeks.length * WEEK_PX) + 'px' }">
+                <div class="month-header">{{ m.name }}</div>
+                <div class="month-weeks">
+                  <div class="week-cell" v-for="(w, wi) in m.weeks" :key="wi" :class="{ 'first-week': wi === 0 }" :style="{ width: WEEK_PX + 'px' }">
+                    {{ w.day }}
+                  </div>
+                </div>
               </div>
             </div>
             <div class="rowline" v-for="t in state.tasks" :key="'line-'+t.id">

@@ -57,9 +57,7 @@ html, body {
 }
 
 .ruler {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: var(--day-px);
+  display: flex;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -67,18 +65,42 @@ html, body {
   z-index: 2;
 }
 
-.ruler .cell {
-  height: 28px;
-  font-size: 11px;
-  color: var(--muted);
+.month-section {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #696969;
+  flex-shrink: 0;
+}
+
+.month-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-left: 1px solid var(--line);
+  justify-content: flex-start;
+  padding: 3px 7px 6px 7px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--fg);
+  border-bottom: none;
 }
-.ruler .cell.week {
-  border-left-color: #d0d0d0;
-  box-shadow: inset 2px 0 0 #d0d0d0;
+
+.month-weeks {
+  display: flex;
+}
+
+.week-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px 4px 7px;
+  border-left: 1px solid #bcbcbc;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--fg);
+  flex-shrink: 0;
+}
+.week-cell.first-week {
+  border-left-color: #696969;
 }
 
 .rows {
