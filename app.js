@@ -469,59 +469,63 @@
           </div>
         </div>
 
-        <div class="gantt" v-if="state.project">
-          <div class="left-col">
-            <div class="header">
+        <div class="gantt-wrapper" v-if="state.project">
+          <div class="gantt-header-row">
+            <div class="gantt-header-left">
               <span class="muted">Task</span>
               <button v-if="state.isEditing" class="add-task-btn-header" @click="addMainTask" title="Add task">
-                <svg viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(45deg);">
-                  <path d="M3 0V6M0 3H6" stroke="currentColor" stroke-width="1"/>
+                <svg viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 0V6M0 3H6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
                 </svg>
               </button>
             </div>
-            <div class="item" v-for="t in state.tasks" :key="t.id">
-              <input v-if="state.isEditing" type="text" :value="t.name" @change="e=>renameMainTask(t,e)" />
-              <span v-else class="task-name-text">{{ t.name }}</span>
-              <div v-if="state.isEditing" class="row-actions">
-                <button class="btn" title="Add subtask" @click="()=>addSubtask(t)">+</button>
-                <button class="btn" title="Delete row" @click="()=>deleteMainTask(t)">×</button>
-              </div>
-            </div>
-          </div>
-          <div class="right-col">
-            <div class="ruler" :style="{ width: (state.daysHorizon * DAY_PX) + 'px' }">
-              <div class="month-section" v-for="(m, mi) in state.months" :key="mi" :style="{ width: (m.weeks.length * WEEK_PX) + 'px' }">
-                <div class="month-header">{{ m.name }}</div>
-                <div class="month-weeks">
-                  <div class="week-cell" v-for="(w, wi) in m.weeks" :key="wi" :class="{ 'first-week': wi === 0 }" :style="{ width: WEEK_PX + 'px' }">
-                    {{ w.day }}
+            <div class="gantt-header-right">
+              <div class="ruler" :style="{ width: (state.daysHorizon * DAY_PX) + 'px' }">
+                <div class="month-section" v-for="(m, mi) in state.months" :key="mi" :style="{ width: (m.weeks.length * WEEK_PX) + 'px' }">
+                  <div class="month-header">{{ m.name }}</div>
+                  <div class="month-weeks">
+                    <div class="week-cell" v-for="(w, wi) in m.weeks" :key="wi" :class="{ 'first-week': wi === 0 }" :style="{ width: WEEK_PX + 'px' }">
+                      {{ w.day }}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div class="rowline" v-for="t in state.tasks" :key="'line-'+t.id">
-              <div class="timeline" :style="{ width: Math.max(computeRowWidth(t), state.daysHorizon * DAY_PX) + 'px' }">
-                <template v-for="(s, i) in t.subtasks" :key="s.id">
-                  <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
-                    <!-- Name: text in default mode, input in active mode -->
-                    <span v-if="!state.isEditing || state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
-                    <input v-else class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" @click.stop @focus.stop />
-                    
-                    <!-- User select: only visible in active mode -->
-                    <select v-if="state.isEditing && state.selectedSubtaskId === s.id" class="user-select" :value="s.user_id" @change="e=>updateSubtaskField(s,'user_id', e.target.value ? Number(e.target.value) : null)" @click.stop>
-                      <option :value="">Unassigned</option>
-                      <option v-for="u in state.users" :key="u.id" :value="u.id">{{ u.name }}</option>
-                    </select>
-                    
-                    <!-- Days input: only visible in active mode -->
-                    <input v-if="state.isEditing && state.selectedSubtaskId === s.id" class="days-input" type="number" min="1" :value="s.duration_days" @change="e=>updateSubtaskField(s,'duration_days', Math.max(1, Number(e.target.value)))" @click.stop />
-                    
-                    <!-- Delete button: only visible in active mode -->
-                    <button v-if="state.isEditing && state.selectedSubtaskId === s.id" class="btn" @click.stop="()=>deleteSubtask(s)">×</button>
-                    <div class="resizer" style="cursor: ew-resize;"></div>
-                  </div>
-                </template>
-                <button v-if="state.isEditing" class="btn add-subtask-btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: computeAddButtonLeft(t) + 'px', top: '50%', transform: 'translateY(-50%)' }">+</button>
+          </div>
+          <div class="gantt-rows">
+            <div class="gantt-row" v-for="t in state.tasks" :key="t.id">
+              <div class="gantt-row-left">
+                <input v-if="state.isEditing" type="text" :value="t.name" @change="e=>renameMainTask(t,e)" />
+                <span v-else class="task-name-text">{{ t.name }}</span>
+                <div v-if="state.isEditing" class="row-actions">
+                  <button class="btn" title="Add subtask" @click="()=>addSubtask(t)">+</button>
+                  <button class="btn" title="Delete row" @click="()=>deleteMainTask(t)">×</button>
+                </div>
+              </div>
+              <div class="gantt-row-right">
+                <div class="timeline" :style="{ width: Math.max(computeRowWidth(t), state.daysHorizon * DAY_PX) + 'px' }">
+                  <template v-for="(s, i) in t.subtasks" :key="s.id">
+                    <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
+                      <!-- Name: text in default mode, input in active mode -->
+                      <span v-if="!state.isEditing || state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
+                      <input v-else class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" @click.stop @focus.stop />
+                      
+                      <!-- User select: only visible in active mode -->
+                      <select v-if="state.isEditing && state.selectedSubtaskId === s.id" class="user-select" :value="s.user_id" @change="e=>updateSubtaskField(s,'user_id', e.target.value ? Number(e.target.value) : null)" @click.stop>
+                        <option :value="">Unassigned</option>
+                        <option v-for="u in state.users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                      </select>
+                      
+                      <!-- Days input: only visible in active mode -->
+                      <input v-if="state.isEditing && state.selectedSubtaskId === s.id" class="days-input" type="number" min="1" :value="s.duration_days" @change="e=>updateSubtaskField(s,'duration_days', Math.max(1, Number(e.target.value)))" @click.stop />
+                      
+                      <!-- Delete button: only visible in active mode -->
+                      <button v-if="state.isEditing && state.selectedSubtaskId === s.id" class="btn" @click.stop="()=>deleteSubtask(s)">×</button>
+                      <div class="resizer" style="cursor: ew-resize;"></div>
+                    </div>
+                  </template>
+                  <button v-if="state.isEditing" class="btn add-subtask-btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: computeAddButtonLeft(t) + 'px', top: '50%', transform: 'translateY(-50%)' }">+</button>
+                </div>
               </div>
             </div>
           </div>

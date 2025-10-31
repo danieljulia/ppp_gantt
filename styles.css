@@ -108,18 +108,68 @@ html, body {
 }
 
 /* New unified layout */
-.gantt { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.left-col { flex: 0 0 260px; border-right: 1px solid var(--line); }
-.left-col .header { 
-  height: 43px; 
-  display: flex; 
-  align-items: center; 
+.gantt-wrapper { 
+  border: 1px solid var(--line); 
+  border-radius: 8px; 
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.gantt-header-row {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+}
+.gantt-header-left {
+  flex: 0 0 260px;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 5px 8px 5px 18px; 
-  border-bottom: 1px solid var(--line); 
+  padding: 5px 8px 5px 18px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   font-weight: 700;
   font-size: 14px;
+  background: var(--bg);
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
+.gantt-header-right {
+  flex: 1;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.gantt-rows {
+  display: flex;
+  flex-direction: column;
+}
+.gantt-row {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  height: 46px;
+}
+.gantt-row-left {
+  flex: 0 0 260px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-right: 1px solid var(--line);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg);
+  box-sizing: border-box;
+}
+.gantt-row-right {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: visible;
 }
 .add-task-btn-header {
   border: 1px solid #c4c4c4;
@@ -140,38 +190,19 @@ html, body {
   width: 6px;
   height: 6px;
 }
-.left-col .item { 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between; 
-  gap: 8px; 
-  padding: 8px; 
-  border-bottom: 1px solid var(--line); 
-  height: 46px;
-  box-sizing: border-box;
-}
-.left-col .item input[type="text"] { 
-  width: 100%; 
+.gantt-row-left input[type="text"] { 
+  flex: 1;
   border: 1px solid var(--line); 
   border-radius: 6px; 
   padding: 6px 8px; 
   font-weight: 500;
   font-size: 14px;
 }
-.left-col .item .task-name-text {
+.gantt-row-left .task-name-text {
   flex: 1;
   font-weight: 500;
   font-size: 14px;
   padding: 6px 10px;
-}
-
-.right-col { position: relative; overflow-x: auto; flex: 1; }
-.right-col .ruler { position: sticky; top: 0; z-index: 2; }
-.right-col .rowline { 
-  border-bottom: 1px solid var(--line); 
-  height: 46px;
-  display: flex;
-  align-items: center;
 }
 
 .timeline {
