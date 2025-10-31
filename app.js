@@ -239,9 +239,14 @@
       async function addUser() {
         const name = prompt('User name?')
         if (!name) return
+        // Figma-inspired color palette (pastel, light, vivid colors)
+        // Based on: #fbe3be, #c3befb, #fbbef7
         const palette = [
-          '#e6194b','#3cb44b','#0082c8','#f58231','#911eb4','#46f0f0','#f032e6','#d2f53c','#fabebe','#008080',
-          '#e6beff','#aa6e28','#800000','#aaffc3','#808000','#ffd8b1','#000080','#808080','#ffe119','#ffd1dc'
+          '#fbe3be', '#c3befb', '#fbbef7', // Original Figma colors
+          '#befe7a', '#ffbe7a', '#7abefe', '#fe7a7a', '#7afe7a', // Similar vibrant pastels
+          '#be7afe', '#febe3b', '#3bfebe', '#bebefe', '#febebe', '#befebe', // More variations
+          '#d9beff', '#ffe0be', '#beffe0', '#ffbed9', '#bed9ff', '#ffd9be', // Additional soft colors
+          '#e8c8ff', '#ffe8c8', '#c8ffe8', '#ffe8d9', '#c8e8ff', '#fff0c8' // Extra light variants
         ]
         const color = palette[(state.users.length) % palette.length]
         await api.addUser({ project_id: state.project.id, name, color })

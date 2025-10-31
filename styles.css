@@ -15,7 +15,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--fg);
-  font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
 }
 
 #app { padding: 16px; }
@@ -112,7 +112,14 @@ html, body {
 .left-col { flex: 0 0 260px; border-right: 1px solid var(--line); }
 .left-col .header { height: 28px; display: flex; align-items: center; padding: 0 8px; border-bottom: 1px solid var(--line); }
 .left-col .item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-bottom: 1px solid var(--line); }
-.left-col .item input[type="text"] { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.left-col .item input[type="text"] { 
+  width: 100%; 
+  border: 1px solid var(--line); 
+  border-radius: 6px; 
+  padding: 6px 8px; 
+  font-weight: 500;
+  font-size: 14px;
+}
 
 .right-col { position: relative; overflow-x: auto; flex: 1; }
 .right-col .ruler { position: sticky; top: 0; z-index: 2; }
@@ -151,6 +158,8 @@ html, body {
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
+  font-weight: 500;
+  font-size: 14px;
 }
 .bar .name-input {
   background: transparent;
@@ -158,6 +167,8 @@ html, body {
   color: inherit;
   flex: 1;
   min-width: 0;
+  font-weight: 500;
+  font-size: 14px;
 }
 .bar .name-input:focus { outline: none; }
 .bar.active .name-input {
@@ -179,6 +190,8 @@ html, body {
   border-radius: 4px;
   padding: 2px 4px;
   -moz-appearance: textfield;
+  font-weight: 500;
+  font-size: 14px;
 }
 .bar .days-input::-webkit-outer-spin-button,
 .bar .days-input::-webkit-inner-spin-button {
@@ -189,6 +202,8 @@ html, body {
   border: none;
   border-radius: 4px;
   padding: 2px 4px;
+  font-weight: 500;
+  font-size: 14px;
 }
 .bar .resizer {
   position: absolute;
