@@ -101,6 +101,7 @@
         daysHorizon: 60,
         months: [],
         selectedSubtaskId: null,
+        editingUserId: null,
       })
 
       function computeRowWidth(task) {
@@ -275,6 +276,17 @@
         await api.updateUser({ id: user.id, [field]: value })
         user[field] = value
       }
+      
+      function startEditingUser(userId) {
+        // Only start editing if not already editing this user
+        if (state.editingUserId !== userId) {
+          state.editingUserId = userId
+        }
+      }
+      
+      function stopEditingUser() {
+        state.editingUserId = null
+      }
 
       async function deleteUser(user) {
         if (!confirm('Delete user? Subtasks assigned will be unassigned.')) return
@@ -377,6 +389,10 @@
           if (!e.target.closest('.bar') && !e.target.closest('.gantt')) {
             state.selectedSubtaskId = null
           }
+          // Stop editing user when clicking outside user pills
+          if (!e.target.closest('.user-pill')) {
+            state.editingUserId = null
+          }
         })
       })
 
@@ -401,6 +417,8 @@
         onBarMouseDown,
         bestTextColor,
         selectSubtask,
+        startEditingUser,
+        stopEditingUser,
         DAY_PX,
         WEEK_PX: 7 * DAY_PX, // 7 days * 24px = 168px per week
       }
@@ -417,10 +435,12 @@
           <div class="users">
             <span class="muted">Users</span>
             <template v-for="u in state.users" :key="u.id">
-              <span class="user-pill">
-                <input type="color" :value="u.color" @change="e=>updateUser(u,'color',e.target.value)" />
-                <input type="text" :value="u.name" @change="e=>updateUser(u,'name',e.target.value)" />
-                <button class="btn" @click="()=>deleteUser(u)">×</button>
+              <span class="user-pill" :class="{ editing: state.editingUserId === u.id }" @click="startEditingUser(u.id)">
+                <input v-if="state.editingUserId === u.id" type="color" :value="u.color" @change="e=>updateUser(u,'color',e.target.value)" @click.stop />
+                <span v-else class="user-color-preview" :style="{ background: u.color }"></span>
+                <input v-if="state.editingUserId === u.id" type="text" :value="u.name" @change="e=>updateUser(u,'name',e.target.value)" @blur="stopEditingUser" @keyup.enter="stopEditingUser" @click.stop />
+                <span v-else class="user-name">{{ u.name }}</span>
+                <button class="btn delete-user-btn" @click.stop="()=>deleteUser(u)">×</button>
               </span>
             </template>
             <button class="btn" @click="addUser">+ Add user</button>

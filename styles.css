@@ -250,27 +250,58 @@ html, body {
 .users {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 .users .user-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 2px 6px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 5px;
+  width: fit-content;
+  cursor: pointer;
+}
+.user-color-preview {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 .users input[type="color"] {
   border: none;
   background: transparent;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 .users input[type="text"] {
   border: none;
   background: transparent;
-  padding: 2px 4px;
+  padding: 1px 2px;
+  font-size: 14px;
+  font-weight: 500;
+  width: auto;
+  min-width: 60px;
+  outline: none;
+}
+.users .delete-user-btn {
+  padding: 2px 6px;
+  font-size: 14px;
+  opacity: 0.6;
+}
+.user-pill:hover .delete-user-btn,
+.user-pill.editing .delete-user-btn {
+  opacity: 1;
 }
 
 .header {
