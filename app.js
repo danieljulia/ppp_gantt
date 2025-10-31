@@ -902,6 +902,7 @@
                   <div v-if="state.endDate && state.actualEndDayPx > 0" class="end-date-line" :style="{ left: state.actualEndDayPx + 'px' }"></div>
                   <template v-for="(s, i) in t.subtasks" :key="s.id">
                     <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }"
+                         :title="s.name || 'Subtask'"
                          :draggable="state.isEditing && t.subtasks.length > 1"
                          @dragstart="(e)=>onSubtaskDragStart(e,t,s,i)"
                          @dragend="onSubtaskDragEnd"
