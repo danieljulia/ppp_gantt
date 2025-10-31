@@ -2,6 +2,7 @@
   dayjs.extend(window.dayjs_plugin_customParseFormat)
 
   const DAY_PX = 24 // keep in sync with CSS var --day-px
+  const EDIT_MIN_PX = 240 // min width used previously; now using auto width in edit
   const SUBTASK_GAP_PX = 6
 
   // Contrast-aware text color selection (WCAG-inspired)
@@ -113,10 +114,27 @@
         const daysBefore = task.subtasks.slice(0, subIndex).reduce((a, s) => a + Number(s.duration_days || 0), 0)
         return (startOffset + daysBefore) * DAY_PX + subIndex * SUBTASK_GAP_PX
       }
+      
+      function computeAddButtonLeft(task) {
+        if (!task.subtasks || task.subtasks.length === 0) {
+          const startOffset = Number(task.start_offset_days || 0)
+          return startOffset * DAY_PX + 8
+        }
+        const lastSubtaskIndex = task.subtasks.length - 1
+        const lastSubtaskLeft = computeSubtaskLeft(task, lastSubtaskIndex)
+        const lastSubtaskWidth = Number(task.subtasks[lastSubtaskIndex].duration_days || 0) * DAY_PX
+        return lastSubtaskLeft + lastSubtaskWidth + 8 // 8px gap after last subtask
+      }
 
       function colorForUser(userId) {
         const u = state.users.find(u => u.id === userId)
-        return u ? u.color : '#999999'
+        // lighter default gray when unassigned
+        return u ? u.color : '#dcdcdc'
+      }
+
+      function computeBarWidthValue(sub) {
+        if (state.selectedSubtaskId === sub.id) return 'auto'
+        return (Number(sub.duration_days || 0) * DAY_PX) + 'px'
       }
 
       async function loadProjects() {
@@ -366,6 +384,8 @@
         state,
         computeRowWidth,
         computeSubtaskLeft,
+        computeBarWidthValue,
+        computeAddButtonLeft,
         colorForUser,
         onProjectNameChange,
         onProjectDateChange,
@@ -432,7 +452,7 @@
             <div class="rowline" v-for="t in state.tasks" :key="'line-'+t.id">
               <div class="timeline" :style="{ width: Math.max(computeRowWidth(t), state.daysHorizon * DAY_PX) + 'px' }">
                 <template v-for="(s, i) in t.subtasks" :key="s.id">
-                  <div class="bar" :class="{ active: state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: (s.duration_days*DAY_PX)+'px', background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
+                  <div class="bar" :class="{ active: state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
                     <!-- Name: text in default mode, input in active mode -->
                     <span v-if="state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
                     <input v-else class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" @click.stop @focus.stop />
@@ -451,7 +471,7 @@
                     <div class="resizer" style="cursor: ew-resize;"></div>
                   </div>
                 </template>
-                <button class="btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: (computeRowWidth(t)+8)+'px', top: '2px' }">+</button>
+                <button class="btn add-subtask-btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: computeAddButtonLeft(t) + 'px', top: '50%', transform: 'translateY(-50%)' }">+</button>
               </div>
             </div>
           </div>
