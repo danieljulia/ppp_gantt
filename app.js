@@ -99,6 +99,7 @@
         error: null,
         daysHorizon: 60,
         months: [],
+        selectedSubtaskId: null,
       })
 
       function computeRowWidth(task) {
@@ -108,8 +109,9 @@
       }
 
       function computeSubtaskLeft(task, subIndex) {
+        const startOffset = Number(task.start_offset_days || 0)
         const daysBefore = task.subtasks.slice(0, subIndex).reduce((a, s) => a + Number(s.duration_days || 0), 0)
-        return daysBefore * DAY_PX + subIndex * SUBTASK_GAP_PX
+        return (startOffset + daysBefore) * DAY_PX + subIndex * SUBTASK_GAP_PX
       }
 
       function colorForUser(userId) {
@@ -143,8 +145,9 @@
       function recomputeHorizon() {
         let maxDays = 30
         for (const t of state.tasks) {
-          const d = t.subtasks.reduce((a, s) => a + Number(s.duration_days || 0), 0)
-          if (d > maxDays) maxDays = d
+          const taskDays = t.subtasks.reduce((a, s) => a + Number(s.duration_days || 0), 0)
+          const totalDays = Number(t.start_offset_days || 0) + taskDays
+          if (totalDays > maxDays) maxDays = totalDays
         }
         state.daysHorizon = Math.max(maxDays, 30)
         computeMonths()
@@ -256,14 +259,47 @@
         await loadProject()
       }
 
-      // Drag-resize
+      function selectSubtask(subtaskId) {
+        state.selectedSubtaskId = subtaskId
+      }
+      function deselectSubtask() {
+        state.selectedSubtaskId = null
+      }
+
+      // Drag-resize and drag-move
       let dragging = null
+      let clickStartPos = null
+      let clickedSubtaskId = null
       function onBarMouseDown(e, task, sub, subIndex) {
-        if (!e.target.classList.contains('resizer')) return
+        const isResizer = e.target.classList.contains('resizer')
+        const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON'
+        
+        if (isInput) {
+          // If clicking input, just select (don't drag)
+          selectSubtask(sub.id)
+          return
+        }
+        
+        // Record click position to detect click vs drag
+        clickStartPos = { x: e.clientX, y: e.clientY }
+        clickedSubtaskId = sub.id
+        
         e.preventDefault()
         const startX = e.clientX
-        const startDays = Number(sub.duration_days)
-        dragging = { task, sub, startX, startDays }
+        const currentLeft = computeSubtaskLeft(task, subIndex)
+        
+        if (isResizer) {
+          // Resize mode
+          const startDays = Number(sub.duration_days)
+          dragging = { mode: 'resize', task, sub, startX, startDays }
+        } else {
+          // Move mode - move entire row
+          const startOffset = Number(task.start_offset_days || 0)
+          dragging = { mode: 'move', task, startX, startOffset, startLeft: currentLeft }
+          // Select subtask when starting to move
+          selectSubtask(sub.id)
+        }
+        
         window.addEventListener('mousemove', onMouseMove)
         window.addEventListener('mouseup', onMouseUp)
       }
@@ -271,23 +307,55 @@
         if (!dragging) return
         const dx = e.clientX - dragging.startX
         const dDays = Math.round(dx / DAY_PX)
-        const newDays = Math.max(1, dragging.startDays + dDays)
-        if (newDays !== dragging.sub.duration_days) {
-          dragging.sub.duration_days = newDays
+        
+        if (dragging.mode === 'resize') {
+          const newDays = Math.max(1, dragging.startDays + dDays)
+          if (newDays !== dragging.sub.duration_days) {
+            dragging.sub.duration_days = newDays
+          }
+        } else if (dragging.mode === 'move') {
+          const newOffset = Math.max(0, dragging.startOffset + dDays)
+          dragging.task.start_offset_days = newOffset
         }
       }
-      async function onMouseUp() {
-        if (!dragging) return
-        const { sub } = dragging
-        const newDays = Math.max(1, Number(sub.duration_days))
-        await api.updateSubtask({ id: sub.id, duration_days: newDays })
-        dragging = null
+      async function onMouseUp(e) {
+        if (dragging) {
+          if (dragging.mode === 'resize') {
+            const { sub } = dragging
+            const newDays = Math.max(1, Number(sub.duration_days))
+            await api.updateSubtask({ id: sub.id, duration_days: newDays })
+          } else if (dragging.mode === 'move') {
+            const { task } = dragging
+            const newOffset = Math.max(0, Number(task.start_offset_days || 0))
+            await api.updateMainTask({ id: task.id, start_offset_days: newOffset })
+          }
+          dragging = null
+        } else if (clickStartPos && clickedSubtaskId) {
+          // Check if it was a click (not a drag)
+          const dx = Math.abs(e.clientX - clickStartPos.x)
+          const dy = Math.abs(e.clientY - clickStartPos.y)
+          if (dx < 5 && dy < 5) {
+            // It was a click, select the subtask
+            selectSubtask(clickedSubtaskId)
+          }
+          clickStartPos = null
+          clickedSubtaskId = null
+        }
+        
         window.removeEventListener('mousemove', onMouseMove)
         window.removeEventListener('mouseup', onMouseUp)
         recomputeHorizon()
       }
 
-      Vue.onMounted(loadProjects)
+      Vue.onMounted(() => {
+        loadProjects()
+        // Deselect subtask when clicking outside bars (but not on other inputs/buttons)
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.bar') && !e.target.closest('.gantt')) {
+            state.selectedSubtaskId = null
+          }
+        })
+      })
 
       return {
         state,
@@ -307,6 +375,7 @@
         deleteUser,
         onBarMouseDown,
         bestTextColor,
+        selectSubtask,
         DAY_PX,
         WEEK_PX: 7 * DAY_PX, // 7 days * 24px = 168px per week
       }
@@ -358,15 +427,23 @@
             <div class="rowline" v-for="t in state.tasks" :key="'line-'+t.id">
               <div class="timeline" :style="{ width: Math.max(computeRowWidth(t), state.daysHorizon * DAY_PX) + 'px' }">
                 <template v-for="(s, i) in t.subtasks" :key="s.id">
-                  <div class="bar" :style="{ left: computeSubtaskLeft(t,i)+'px', width: (s.duration_days*DAY_PX)+'px', background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
-                    <input class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" />
-                    <select class="user-select" :value="s.user_id" @change="e=>updateSubtaskField(s,'user_id', e.target.value ? Number(e.target.value) : null)">
-                      <option :value="" selected>Unassigned</option>
+                  <div class="bar" :class="{ active: state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: (s.duration_days*DAY_PX)+'px', background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }" @mousedown="(e)=>onBarMouseDown(e,t,s,i)">
+                    <!-- Name: text in default mode, input in active mode -->
+                    <span v-if="state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
+                    <input v-else class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" @click.stop @focus.stop />
+                    
+                    <!-- User select: only visible in active mode -->
+                    <select v-if="state.selectedSubtaskId === s.id" class="user-select" :value="s.user_id" @change="e=>updateSubtaskField(s,'user_id', e.target.value ? Number(e.target.value) : null)" @click.stop>
+                      <option :value="">Unassigned</option>
                       <option v-for="u in state.users" :key="u.id" :value="u.id">{{ u.name }}</option>
                     </select>
-                    <input class="days-input" type="number" min="1" :value="s.duration_days" @change="e=>updateSubtaskField(s,'duration_days', Math.max(1, Number(e.target.value)))" />
-                    <button class="btn" @click="()=>deleteSubtask(s)">×</button>
-                    <div class="resizer"></div>
+                    
+                    <!-- Days input: only visible in active mode -->
+                    <input v-if="state.selectedSubtaskId === s.id" class="days-input" type="number" min="1" :value="s.duration_days" @change="e=>updateSubtaskField(s,'duration_days', Math.max(1, Number(e.target.value)))" @click.stop />
+                    
+                    <!-- Delete button: only visible in active mode -->
+                    <button v-if="state.selectedSubtaskId === s.id" class="btn" @click.stop="()=>deleteSubtask(s)">×</button>
+                    <div class="resizer" style="cursor: ew-resize;"></div>
                   </div>
                 </template>
                 <button class="btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: (computeRowWidth(t)+8)+'px', top: '2px' }">+</button>

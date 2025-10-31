@@ -135,19 +135,55 @@ html, body {
   user-select: none;
   top: 50%;
   transform: translateY(-50%);
+  cursor: move;
+  overflow: visible; /* allow edit controls to exceed short bars */
+}
+.bar input,
+.bar select,
+.bar button {
+  cursor: auto;
+}
+.bar .name-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
 }
 .bar .name-input {
   background: transparent;
   border: none;
   color: inherit;
-  width: 220px;
+  flex: 1;
+  min-width: 0;
 }
 .bar .name-input:focus { outline: none; }
+.bar.active .name-input {
+  width: auto;
+  min-width: 220px;
+  max-width: 480px;
+  white-space: normal;
+  text-overflow: clip;
+  background: rgba(255,255,255,0.85);
+  border-radius: 4px;
+  padding: 2px 4px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.05);
+  position: relative;
+  z-index: 2;
+}
 .bar .days-input {
   width: 48px;
   border: none;
   border-radius: 4px;
   padding: 2px 4px;
+  -moz-appearance: textfield;
+}
+.bar .days-input::-webkit-outer-spin-button,
+.bar .days-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .bar .user-select {
   border: none;

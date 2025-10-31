@@ -16,6 +16,13 @@ function db(): PDO {
 
     if ($needMigrate) {
         migrate($pdo);
+    } else {
+        // Check and add start_offset_days if needed
+        try {
+            $pdo->query('SELECT start_offset_days FROM main_tasks LIMIT 1');
+        } catch (PDOException $e) {
+            $pdo->exec('ALTER TABLE main_tasks ADD COLUMN start_offset_days INTEGER NOT NULL DEFAULT 0;');
+        }
     }
     return $pdo;
 }
@@ -46,6 +53,7 @@ function migrate(PDO $pdo): void {
             project_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             position INTEGER NOT NULL,
+            start_offset_days INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
         );'
     );

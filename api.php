@@ -40,7 +40,7 @@ try {
             $users->execute([':pid' => $id]);
             $users = $users->fetchAll();
 
-            $tasksStmt = $pdo->prepare('SELECT id, name, position FROM main_tasks WHERE project_id = :pid ORDER BY position ASC');
+            $tasksStmt = $pdo->prepare('SELECT id, name, position, start_offset_days FROM main_tasks WHERE project_id = :pid ORDER BY position ASC');
             $tasksStmt->execute([':pid' => $id]);
             $tasks = $tasksStmt->fetchAll();
 
@@ -117,10 +117,15 @@ try {
 
         case 'update_main_task':
             $id = (int)($input['id'] ?? 0);
-            $name = trim($input['name'] ?? '');
             if (!$id) jsonResponse(['error' => 'id required'], 400);
-            $stmt = $pdo->prepare('UPDATE main_tasks SET name = :n WHERE id = :id');
-            $stmt->execute([':n' => $name, ':id' => $id]);
+            if (isset($input['name'])) {
+                $stmt = $pdo->prepare('UPDATE main_tasks SET name = :n WHERE id = :id');
+                $stmt->execute([':n' => trim((string)$input['name']), ':id' => $id]);
+            }
+            if (isset($input['start_offset_days'])) {
+                $stmt = $pdo->prepare('UPDATE main_tasks SET start_offset_days = :o WHERE id = :id');
+                $stmt->execute([':o' => max(0, (int)$input['start_offset_days']), ':id' => $id]);
+            }
             jsonResponse(['ok' => true]);
             break;
 
