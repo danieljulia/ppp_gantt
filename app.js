@@ -382,21 +382,25 @@
           e.preventDefault()
           return false
         }
-        // Don't start drag if clicking on inputs/buttons
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('.row-actions')) {
-          e.preventDefault()
-          return false
-        }
+        // Prevent event from bubbling to avoid conflicts
+        e.stopPropagation()
         draggingRow = task
         draggingRowType = 'main_task'
         draggingRowIndex = taskIndex
         e.dataTransfer.effectAllowed = 'move'
         e.dataTransfer.setData('text/html', '') // Required for some browsers
-        e.currentTarget.classList.add('dragging')
+        // Add dragging class to the row, not just the handle
+        const rowElement = e.currentTarget.closest('.gantt-row')
+        if (rowElement) {
+          rowElement.classList.add('dragging')
+        }
       }
       
       function onRowDragEnd(e) {
-        e.currentTarget.classList.remove('dragging')
+        const rowElement = e.currentTarget.closest('.gantt-row')
+        if (rowElement) {
+          rowElement.classList.remove('dragging')
+        }
         draggingRow = null
         draggingRowType = null
         draggingRowIndex = null
@@ -405,10 +409,11 @@
       function onRowDragOver(e, targetTask, targetIndex) {
         if (!draggingRow || draggingRowType !== 'main_task') return
         e.preventDefault()
+        e.stopPropagation()
         e.dataTransfer.dropEffect = 'move'
         
-        const rowElement = e.currentTarget.closest('.gantt-row')
-        if (rowElement) {
+        const rowElement = e.currentTarget
+        if (rowElement && rowElement.classList.contains('gantt-row')) {
           const rect = rowElement.getBoundingClientRect()
           const midpoint = rect.top + rect.height / 2
           if (e.clientY < midpoint) {
@@ -422,18 +427,19 @@
       }
       
       function onRowDragLeave(e) {
-        const rowElement = e.currentTarget.closest('.gantt-row')
-        if (rowElement) {
+        const rowElement = e.currentTarget
+        if (rowElement && rowElement.classList.contains('gantt-row')) {
           rowElement.classList.remove('drag-over-top', 'drag-over-bottom')
         }
       }
       
       async function onRowDrop(e, targetTask, targetIndex) {
         e.preventDefault()
+        e.stopPropagation()
         if (!draggingRow || draggingRowType !== 'main_task' || draggingRowIndex === null) return
         
-        const rowElement = e.currentTarget.closest('.gantt-row')
-        if (rowElement) {
+        const rowElement = e.currentTarget
+        if (rowElement && rowElement.classList.contains('gantt-row')) {
           rowElement.classList.remove('drag-over-top', 'drag-over-bottom')
         }
         
@@ -472,16 +478,12 @@
         draggingRowIndex = null
       }
       
-      // Subtask reordering handlers
+      // Subtask reordering handlers (for the reorder handle only)
       let subtaskDragStartPos = null
       let subtaskDragStartTime = null
-      function onSubtaskDragStart(e, task, subtask, subIndex) {
+      
+      function onSubtaskReorderDragStart(e, task, subtask, subIndex) {
         if (!state.isEditing) {
-          e.preventDefault()
-          return false
-        }
-        // Don't start drag if clicking on inputs/buttons/resizer
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.closest('.resizer')) {
           e.preventDefault()
           return false
         }
@@ -496,50 +498,33 @@
           window.removeEventListener('mousemove', onMouseMove)
           window.removeEventListener('mouseup', onMouseUp)
         }
+        
         draggingRow = subtask
         draggingRowType = 'subtask'
         draggingRowIndex = subIndex
         draggingRowMainTaskId = task.id
         e.dataTransfer.effectAllowed = 'move'
         e.dataTransfer.setData('text/html', '')
-        e.currentTarget.classList.add('dragging')
+        
+        // Add dragging class to the subtask bar, not the handle
+        const barElement = document.querySelector(`[data-subtask-id="${subtask.id}"]`)
+        if (barElement) {
+          barElement.classList.add('dragging')
+        }
         e.stopPropagation()
       }
       
       function onSubtaskDragEnd(e) {
-        e.currentTarget.classList.remove('dragging')
-        
-        // If it was just a click (no significant drag), select the subtask
-        let wasClick = false
-        if (subtaskDragStartPos && subtaskDragStartTime) {
-          const dx = Math.abs(e.clientX - subtaskDragStartPos.x)
-          const dy = Math.abs(e.clientY - subtaskDragStartPos.y)
-          const timeElapsed = Date.now() - subtaskDragStartTime
-          // If minimal movement and quick (click-like), treat as click
-          if ((dx < 5 && dy < 5) || (timeElapsed < 200 && dy < 10)) {
-            wasClick = true
-            if (draggingRow) {
-              selectSubtask(draggingRow.id)
-            }
-          }
-          subtaskDragStartPos = null
-          subtaskDragStartTime = null
+        // Remove dragging class from all bars
+        const draggingBar = document.querySelector('.bar.dragging')
+        if (draggingBar) {
+          draggingBar.classList.remove('dragging')
         }
         
-        if (!wasClick) {
-          draggingRow = null
-          draggingRowType = null
-          draggingRowIndex = null
-          draggingRowMainTaskId = null
-        } else {
-          // Still clear dragging state after a short delay to allow click handler
-          setTimeout(() => {
-            draggingRow = null
-            draggingRowType = null
-            draggingRowIndex = null
-            draggingRowMainTaskId = null
-          }, 50)
-        }
+        // Only clear if no drop happened (drop handler will clear it)
+        // Don't clear here if a drop is about to happen
+        subtaskDragStartPos = null
+        subtaskDragStartTime = null
       }
       
       function onSubtaskDragOver(e, task, targetSubtask, targetIndex) {
@@ -572,11 +557,24 @@
       async function onSubtaskDrop(e, task, targetSubtask, targetIndex) {
         e.preventDefault()
         e.stopPropagation()
-        if (!draggingRow || draggingRowType !== 'subtask' || draggingRowIndex === null || draggingRowMainTaskId !== task.id) return
+        if (!draggingRow || draggingRowType !== 'subtask' || draggingRowIndex === null || draggingRowMainTaskId !== task.id) {
+          // Clear dragging state
+          draggingRow = null
+          draggingRowType = null
+          draggingRowIndex = null
+          draggingRowMainTaskId = null
+          return
+        }
         
         const barElement = e.currentTarget
         if (barElement) {
           barElement.classList.remove('drag-over-left', 'drag-over-right')
+        }
+        
+        // Remove dragging class
+        const draggingBar = document.querySelector('.bar.dragging')
+        if (draggingBar) {
+          draggingBar.classList.remove('dragging')
         }
         
         if (draggingRowIndex === targetIndex) {
@@ -621,6 +619,52 @@
       let clickStartPos = null
       let clickedSubtaskId = null
       
+      // Handler for moving entire row horizontally (all subtasks)
+      function onRowMoveHandleMouseDown(e, task) {
+        if (!state.isEditing) return
+        e.preventDefault()
+        e.stopPropagation()
+        
+        const startX = e.clientX
+        const startOffset = Number(task.start_offset_days || 0)
+        
+        // Add visual feedback class to the row
+        const rowElement = e.currentTarget.closest('.gantt-row')
+        if (rowElement) {
+          rowElement.classList.add('row-moving')
+        }
+        
+        // Use the existing dragging system with 'move' mode
+        // This will update task.start_offset_days in real-time via onMouseMove
+        dragging = { mode: 'move', task, startX, startOffset, startLeft: 0 }
+        
+        // Create dedicated mouseup handler for row move
+        async function onRowMoveMouseUp(upEvent) {
+          if (dragging && dragging.mode === 'move') {
+            const { task } = dragging
+            const newOffset = Math.max(0, Number(task.start_offset_days || 0))
+            // Save the final position to backend
+            await api.updateMainTask({ id: task.id, start_offset_days: newOffset })
+            dragging = null
+            recomputeHorizon()
+          }
+          
+          // Remove visual feedback
+          const rowElements = document.querySelectorAll('.gantt-row.row-moving')
+          rowElements.forEach(el => el.classList.remove('row-moving'))
+          
+          window.removeEventListener('mousemove', onMouseMove)
+          window.removeEventListener('mouseup', onRowMoveMouseUp)
+        }
+        
+        // Use existing onMouseMove to update position in real-time
+        window.addEventListener('mousemove', onMouseMove)
+        window.addEventListener('mouseup', onRowMoveMouseUp)
+        
+        // Prevent default to avoid text selection
+        return false
+      }
+      
       function onBarMouseDown(e, task, sub, subIndex) {
         if (!state.isEditing) return
         const isResizer = e.target.classList.contains('resizer')
@@ -657,7 +701,7 @@
             return
           }
           
-          // If horizontal movement is significant, proceed with horizontal drag
+          // If horizontal movement is significant, proceed with horizontal drag (only for resizing)
           if (dx > 5) {
             hasMoved = true
             e.preventDefault()
@@ -667,16 +711,13 @@
               // Resize mode
               const startDays = Number(sub.duration_days)
               dragging = { mode: 'resize', task, sub, startX, startDays }
+              window.addEventListener('mousemove', onMouseMove)
+              window.addEventListener('mouseup', onMouseUp)
             } else {
-              // Move mode - move entire row
-              const startOffset = Number(task.start_offset_days || 0)
-              dragging = { mode: 'move', task, startX, startOffset, startLeft: currentLeft }
-              // Select subtask when starting to move
+              // Don't allow moving individual subtask by clicking on bar - use handles instead
               selectSubtask(sub.id)
+              return
             }
-            
-            window.addEventListener('mousemove', onMouseMove)
-            window.addEventListener('mouseup', onMouseUp)
           }
         }
         
@@ -789,6 +830,7 @@
         updateUser,
         deleteUser,
         onBarMouseDown,
+        onRowMoveHandleMouseDown,
         bestTextColor,
         selectSubtask,
         toggleEditing,
@@ -799,7 +841,7 @@
         onRowDragOver,
         onRowDragLeave,
         onRowDrop,
-        onSubtaskDragStart,
+        onSubtaskReorderDragStart,
         onSubtaskDragEnd,
         onSubtaskDragOver,
         onSubtaskDragLeave,
@@ -877,14 +919,29 @@
             </div>
           </div>
           <div class="gantt-rows">
-            <div class="gantt-row" v-for="(t, ti) in state.tasks" :key="t.id"
-                 :draggable="state.isEditing"
-                 @dragstart="(e)=>onRowDragStart(e,t,ti)"
-                 @dragend="onRowDragEnd"
-                 @dragover="(e)=>onRowDragOver(e,t,ti)"
+            <div class="gantt-row" 
+                 v-for="(t, ti) in state.tasks" 
+                 :key="t.id"
+                 @dragover.prevent="(e)=>onRowDragOver(e,t,ti)"
                  @dragleave="onRowDragLeave"
-                 @drop="(e)=>onRowDrop(e,t,ti)">
+                 @drop.prevent="(e)=>onRowDrop(e,t,ti)">
               <div class="gantt-row-left">
+                <!-- Drag handle for row reordering -->
+                <div v-if="state.isEditing" 
+                     class="drag-handle"
+                     draggable="true"
+                     @dragstart="(e)=>onRowDragStart(e,t,ti)"
+                     @dragend="onRowDragEnd"
+                     title="Drag to reorder">
+                  <svg viewBox="0 0 12 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="3" cy="4" r="1" fill="currentColor"/>
+                    <circle cx="3" cy="8" r="1" fill="currentColor"/>
+                    <circle cx="3" cy="12" r="1" fill="currentColor"/>
+                    <circle cx="9" cy="4" r="1" fill="currentColor"/>
+                    <circle cx="9" cy="8" r="1" fill="currentColor"/>
+                    <circle cx="9" cy="12" r="1" fill="currentColor"/>
+                  </svg>
+                </div>
                 <input v-if="state.isEditing" type="text" :value="t.name" @change="e=>renameMainTask(t,e)" />
                 <span v-else class="task-name-text">{{ t.name }}</span>
                 <div v-if="state.isEditing" class="row-actions">
@@ -901,16 +958,41 @@
                   <!-- Final end date line (no flag, flag is only in header) -->
                   <div v-if="state.endDate && state.actualEndDayPx > 0" class="end-date-line" :style="{ left: state.actualEndDayPx + 'px' }"></div>
                   <template v-for="(s, i) in t.subtasks" :key="s.id">
+                    <!-- Drag handle to move all subtasks horizontally (only on first subtask, left of it) -->
+                    <div v-if="state.isEditing && i === 0 && t.subtasks.length > 0" 
+                         class="row-move-handle"
+                         :style="{ left: ((Number(t.start_offset_days || 0) * DAY_PX) - 14) + 'px' }"
+                         @mousedown="(e)=>onRowMoveHandleMouseDown(e,t)"
+                         @click.stop
+                         title="Drag to move all subtasks horizontally">
+                      <svg viewBox="0 0 8 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 2L6 6L2 10M2 2L2 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
                     <div class="bar" :class="{ active: state.isEditing && state.selectedSubtaskId === s.id }" :data-subtask-id="s.id" :style="{ left: computeSubtaskLeft(t,i)+'px', width: computeBarWidthValue(s), background: colorForUser(s.user_id), color: bestTextColor(colorForUser(s.user_id)) }"
                          :title="s.name || 'Subtask'"
-                         :draggable="state.isEditing && t.subtasks.length > 1"
-                         @dragstart="(e)=>onSubtaskDragStart(e,t,s,i)"
-                         @dragend="onSubtaskDragEnd"
                          @dragover="(e)=>onSubtaskDragOver(e,t,s,i)"
                          @dragleave="onSubtaskDragLeave"
                          @drop="(e)=>onSubtaskDrop(e,t,s,i)"
                          @mousedown="(e)=>onBarMouseDown(e,t,s,i)"
                          @click="(e)=>state.isEditing && selectSubtask(s.id)">
+                      <!-- Drag handle for subtask reordering - inside the bar on the left -->
+                      <div v-if="state.isEditing && t.subtasks.length > 1"
+                           class="subtask-reorder-handle"
+                           draggable="true"
+                           @dragstart="(e)=>onSubtaskReorderDragStart(e,t,s,i)"
+                           @dragend="onSubtaskDragEnd"
+                           @click.stop
+                           title="Drag to reorder subtask">
+                        <svg viewBox="0 0 12 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="3" cy="4" r="1" fill="currentColor"/>
+                          <circle cx="3" cy="8" r="1" fill="currentColor"/>
+                          <circle cx="3" cy="12" r="1" fill="currentColor"/>
+                          <circle cx="9" cy="4" r="1" fill="currentColor"/>
+                          <circle cx="9" cy="8" r="1" fill="currentColor"/>
+                          <circle cx="9" cy="12" r="1" fill="currentColor"/>
+                        </svg>
+                      </div>
                       <!-- Name: text in default mode, input in active mode -->
                       <span v-if="!state.isEditing || state.selectedSubtaskId !== s.id" class="name-text">{{ s.name || 'Subtask' }}</span>
                       <input v-else class="name-input" type="text" :value="s.name" placeholder="Subtask" @change="e=>updateSubtaskField(s,'name',e.target.value)" @click.stop @focus.stop />

@@ -186,6 +186,86 @@ html, body {
   background: var(--bg);
   box-sizing: border-box;
 }
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 100%;
+  cursor: grab;
+  color: var(--muted);
+  flex-shrink: 0;
+  padding: 0 4px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle:hover {
+  color: var(--fg);
+}
+
+.drag-handle svg {
+  width: 12px;
+  height: 16px;
+}
+
+.row-move-handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: var(--bar-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  color: var(--muted);
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.row-move-handle:hover {
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.row-move-handle svg {
+  width: 10px;
+  height: 10px;
+}
+
+.subtask-reorder-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 100%;
+  cursor: grab;
+  color: rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  padding: 0 2px;
+  margin-right: 4px;
+}
+
+.subtask-reorder-handle:hover {
+  color: rgba(0, 0, 0, 0.7);
+  opacity: 1;
+}
+
+.subtask-reorder-handle:active {
+  cursor: grabbing;
+}
+
+.subtask-reorder-handle svg {
+  width: 10px;
+  height: 14px;
+}
+
 .gantt-row-right {
   flex: 1;
   min-width: 0;
@@ -229,6 +309,7 @@ html, body {
 .timeline {
   position: relative;
   height: 100%;
+  width: 100%;
   display: flex;
   align-items: center;
 }
@@ -497,6 +578,10 @@ html, body {
 .gantt-row.dragging {
   opacity: 0.5;
   cursor: move;
+}
+
+.gantt-row.row-moving {
+  opacity: 0.7;
 }
 
 .gantt-row.drag-over-top {
