@@ -385,7 +385,7 @@
         const start = e.target.value
         await api.updateProject({ id: state.project.id, start_date: start })
         state.project.start_date = start
-        computeMonths()
+        recomputeHorizon()
       }
 
       async function addMainTask() {
