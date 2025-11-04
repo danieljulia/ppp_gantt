@@ -40,8 +40,26 @@
       })
       return res.json()
     },
-    async getProject(id) {
-      const res = await fetch('api.php?r=get_project&id=' + encodeURIComponent(id))
+    async getProject(id, slug, password) {
+      let url = 'api.php?r=get_project'
+      if (slug) {
+        url += '&slug=' + encodeURIComponent(slug)
+      } else {
+        url += '&id=' + encodeURIComponent(id)
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password || '' })
+      })
+      return res.json()
+    },
+    async checkProjectPassword(slug, password) {
+      const res = await fetch('api.php?r=check_project_password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, password })
+      })
       return res.json()
     },
     async updateProject(payload) {
@@ -93,11 +111,16 @@
       const state = Vue.reactive({
         projects: [],
         projectId: null,
+        projectSlug: null,
+        projectPassword: null,
         project: null,
         users: [],
         tasks: [],
         loading: true,
         error: null,
+        needsPassword: false,
+        passwordError: null,
+        passwordInput: '',
         daysHorizon: 60,
         months: [],
         weekStartDays: [],
@@ -163,25 +186,84 @@
 
       async function loadProjects() {
         state.loading = true
-        const res = await api.getProjects()
-        state.projects = res.projects
-        if (state.projects.length === 0) {
-          const created = await api.createProject({ name: 'untitled', start_date: dayjs().format('YYYY-MM-DD') })
-          state.projectId = created.id
+        // Check if we're in project.php mode (slug-based)
+        const urlParams = new URLSearchParams(window.location.search)
+        const slug = urlParams.get('slug') || window.projectSlug
+        
+        if (slug) {
+          // Project page mode - load by slug
+          state.projectSlug = slug
+          const storedPassword = sessionStorage.getItem('project_password_' + slug)
+          if (storedPassword) {
+            state.projectPassword = storedPassword
+          }
+          await loadProject()
+          state.loading = false
         } else {
-          state.projectId = state.projects[0].id
+          // Legacy mode - load projects list
+          try {
+            const res = await api.getProjects()
+            state.projects = res.projects
+            if (state.projects.length === 0) {
+              const created = await api.createProject({ name: 'untitled', start_date: dayjs().format('YYYY-MM-DD') })
+              state.projectId = created.id
+            } else {
+              state.projectId = state.projects[0].id
+            }
+            await loadProject()
+          } catch (e) {
+            state.error = 'Error loading projects. Please use admin.php to create projects.'
+          }
+          state.loading = false
         }
-        await loadProject()
-        state.loading = false
       }
 
       async function loadProject() {
-        if (!state.projectId) return
-        const res = await api.getProject(state.projectId)
-        state.project = res.project
-        state.users = res.users
-        state.tasks = res.main_tasks
-        recomputeHorizon()
+        if (state.projectSlug) {
+          // Load by slug
+          const res = await api.getProject(null, state.projectSlug, state.projectPassword)
+          if (res.error === 'Invalid password') {
+            state.needsPassword = true
+            state.loading = false
+            return
+          }
+          if (res.error) {
+            state.error = res.error
+            state.loading = false
+            return
+          }
+          state.projectId = res.project.id
+          state.project = res.project
+          state.users = res.users
+          state.tasks = res.main_tasks
+          state.needsPassword = false
+          recomputeHorizon()
+        } else if (state.projectId) {
+          // Load by ID (legacy)
+          const res = await api.getProject(state.projectId, null, null)
+          state.project = res.project
+          state.users = res.users
+          state.tasks = res.main_tasks
+          recomputeHorizon()
+        }
+      }
+
+      async function submitPassword(password) {
+        state.passwordError = null
+        if (!state.projectSlug) return
+        
+        const res = await api.checkProjectPassword(state.projectSlug, password)
+        if (res.error) {
+          state.passwordError = res.error
+          return
+        }
+        
+        state.projectPassword = password
+        sessionStorage.setItem('project_password_' + state.projectSlug, password)
+        state.needsPassword = false
+        state.loading = true
+        await loadProject()
+        state.loading = false
       }
 
       function recomputeHorizon() {
@@ -914,18 +996,28 @@
         onSubtaskDrop,
         subtaskDragOccurred: () => subtaskDragOccurred,
         justDraggedSubtaskId: () => justDraggedSubtaskId,
+        submitPassword,
         DAY_PX,
         WEEK_PX: 7 * DAY_PX, // 7 days * 24px = 168px per week
       }
     },
     template: `
       <div>
-        <div class="header">
-          <div class="topbar">
-            <div class="project-name" :contenteditable="state.isEditing" @blur="onProjectNameChange">{{ state.project ? state.project.name : 'loading…' }}</div>
-            <label class="muted">Start</label>
-            <input v-if="state.project" type="date" :value="state.project.start_date" @change="onProjectDateChange" :disabled="!state.isEditing" />
-          </div>
+        <div v-if="state.needsPassword" class="password-prompt">
+          <h2>Project Password Required</h2>
+          <input type="password" v-model="passwordInput" placeholder="Enter project password" @keyup.enter="submitPassword(passwordInput)" />
+          <div v-if="state.passwordError" class="password-error">{{ state.passwordError }}</div>
+          <button @click="submitPassword(passwordInput)">Access Project</button>
+        </div>
+        <div v-else-if="state.loading">Loading...</div>
+        <div v-else-if="state.error">{{ state.error }}</div>
+        <div v-else>
+          <div class="header">
+            <div class="topbar">
+              <div class="project-name" :contenteditable="state.isEditing" @blur="onProjectNameChange">{{ state.project ? state.project.name : 'loading…' }}</div>
+              <label class="muted">Start</label>
+              <input v-if="state.project" type="date" :value="state.project.start_date" @change="onProjectDateChange" :disabled="!state.isEditing" />
+            </div>
           <div class="users">
             <span class="muted">Users</span>
             <template v-for="u in state.users" :key="u.id">

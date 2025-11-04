@@ -23,6 +23,23 @@ function db(): PDO {
         } catch (PDOException $e) {
             $pdo->exec('ALTER TABLE main_tasks ADD COLUMN start_offset_days INTEGER NOT NULL DEFAULT 0;');
         }
+        // Check and add slug and password if needed
+        try {
+            $pdo->query('SELECT slug FROM projects LIMIT 1');
+        } catch (PDOException $e) {
+            $pdo->exec('ALTER TABLE projects ADD COLUMN slug TEXT;');
+            $pdo->exec('ALTER TABLE projects ADD COLUMN password TEXT NOT NULL DEFAULT "";');
+            // Generate slugs for existing projects
+            $projects = $pdo->query('SELECT id, name FROM projects')->fetchAll();
+            foreach ($projects as $project) {
+                $slug = generateSlug($project['name'], $pdo);
+                $pdo->prepare('UPDATE projects SET slug = :slug WHERE id = :id')->execute([
+                    ':slug' => $slug,
+                    ':id' => $project['id']
+                ]);
+            }
+            $pdo->exec('CREATE UNIQUE INDEX idx_projects_slug ON projects(slug);');
+        }
     }
     return $pdo;
 }
@@ -32,6 +49,8 @@ function migrate(PDO $pdo): void {
         'CREATE TABLE projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL DEFAULT "untitled",
+            slug TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL DEFAULT "",
             start_date TEXT NOT NULL,
             created_at TEXT NOT NULL
         );'
@@ -96,6 +115,31 @@ function getMaxPosition(PDO $pdo, string $table, string $whereCol, int $whereId)
     $stmt->execute([':id' => $whereId]);
     $row = $stmt->fetch();
     return (int)$row['max_pos'];
+}
+
+function generateSlug(string $name, PDO $pdo): string {
+    // Convert to lowercase, replace spaces and special chars with hyphens
+    $slug = strtolower(trim($name));
+    $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
+    $slug = trim($slug, '-');
+    if (empty($slug)) {
+        $slug = 'project';
+    }
+    
+    // Ensure uniqueness
+    $baseSlug = $slug;
+    $counter = 1;
+    while (true) {
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM projects WHERE slug = :slug');
+        $stmt->execute([':slug' => $slug]);
+        if ($stmt->fetchColumn() == 0) {
+            break;
+        }
+        $slug = $baseSlug . '-' . $counter;
+        $counter++;
+    }
+    
+    return $slug;
 }
 
 
