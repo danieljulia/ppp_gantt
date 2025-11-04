@@ -4,6 +4,70 @@
 
 Aquest és un editor de diagrames de Gantt que permet gestionar projectes, tasques i subtasques d'una manera visual i intuïtiva. Podeu organitzar les tasques en el temps, assignar-les a usuaris, i visualitzar el progrés del projecte en una línia temporal.
 
+## Instal·lació
+
+### Requisits
+
+- Servidor web amb PHP 7.4 o superior
+- SQLite3 (inclòs amb PHP)
+- Navegador web modern amb suport per JavaScript (Chrome, Firefox, Safari, Edge)
+
+### Pasos d'instal·lació
+
+1. **Descarregar o clonar el projecte**
+   ```bash
+   git clone <repository-url>
+   cd pppgantt
+   ```
+
+2. **Configurar el servidor web**
+   - Assegureu-vos que el directori del projecte està accessible a través del servidor web
+   - Per a desenvolupament local, podeu utilitzar el servidor PHP integrat:
+     ```bash
+     php -S localhost:8000
+     ```
+
+3. **Configurar permisos**
+   - Assegureu-vos que el servidor web té permisos d'escriptura al directori per crear la base de dades SQLite (`data.sqlite`)
+   ```bash
+   chmod 755 .
+   chmod 666 data.sqlite  # Si ja existeix
+   ```
+
+4. **Configurar la contrasenya d'administrador**
+   - Obreu el fitxer `config.php` i canvieu la contrasenya d'administrador per defecte:
+     ```php
+     'admin_password' => 'la-teva-contrasenya-segura',
+     ```
+
+5. **Accedir a l'aplicació**
+   - Obreu el navegador i aneu a `http://localhost:8000` (o la URL del vostre servidor)
+   - Per accedir a l'àrea d'administració, aneu a `http://localhost:8000/admin.php`
+   - La base de dades SQLite es crearà automàticament en la primera execució
+
+### Primera configuració
+
+1. Accediu a `/admin.php` i inicieu sessió amb la contrasenya d'administrador configurada
+2. Creeu el vostre primer projecte
+3. Assigneu una contrasenya opcional al projecte (per protegir l'accés)
+4. Accediu al projecte mitjançant la URL proporcionada (ex: `project.php?slug=nom-del-projecte`)
+
+### Estructura de fitxers
+
+```
+pppgantt/
+├── index.html          # Pàgina d'inici
+├── admin.php           # Àrea d'administració
+├── project.php         # Vista de projecte individual
+├── api.php             # API REST
+├── db.php              # Configuració de base de dades
+├── config.php          # Configuració (contrasenya admin)
+├── app.js              # Aplicació Vue.js
+├── styles.css          # Estils CSS
+├── data.sqlite         # Base de dades SQLite (es crea automàticament)
+└── README.md           # Aquest fitxer
+```
+
 ## Funcionalitats principals
 
 ### Gestió de projectes
