@@ -40,8 +40,45 @@ function db(): PDO {
             }
             $pdo->exec('CREATE UNIQUE INDEX idx_projects_slug ON projects(slug);');
         }
+        // Check and add history tables if needed
+        try {
+            $pdo->query('SELECT id FROM project_snapshots LIMIT 1');
+        } catch (PDOException $e) {
+            migrateHistoryTables($pdo);
+        }
     }
     return $pdo;
+}
+
+function migrateHistoryTables(PDO $pdo): void {
+    $pdo->exec(
+        'CREATE TABLE project_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            snapshot_data TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            description TEXT,
+            FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );'
+    );
+    
+    $pdo->exec(
+        'CREATE TABLE project_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            snapshot_id INTEGER NULL,
+            event_type TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER,
+            changes TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY(snapshot_id) REFERENCES project_snapshots(id) ON DELETE SET NULL
+        );'
+    );
+    
+    $pdo->exec('CREATE INDEX idx_snapshots_project ON project_snapshots(project_id, created_at DESC);');
+    $pdo->exec('CREATE INDEX idx_events_project ON project_events(project_id, created_at DESC);');
 }
 
 function migrate(PDO $pdo): void {
@@ -89,6 +126,8 @@ function migrate(PDO $pdo): void {
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
         );'
     );
+    
+    migrateHistoryTables($pdo);
 }
 
 function nowIso(): string { return gmdate('c'); }
@@ -140,6 +179,120 @@ function generateSlug(string $name, PDO $pdo): string {
     }
     
     return $slug;
+}
+
+// History/Versioning functions
+function getProjectSnapshot(PDO $pdo, int $projectId): array {
+    $stmt = $pdo->prepare('SELECT id, name, slug, password, start_date FROM projects WHERE id = :id');
+    $stmt->execute([':id' => $projectId]);
+    $project = $stmt->fetch();
+    if (!$project) return [];
+    
+    $users = $pdo->prepare('SELECT id, name, color FROM users WHERE project_id = :pid ORDER BY id ASC');
+    $users->execute([':pid' => $projectId]);
+    $users = $users->fetchAll();
+    
+    $tasksStmt = $pdo->prepare('SELECT id, name, position, start_offset_days FROM main_tasks WHERE project_id = :pid ORDER BY position ASC');
+    $tasksStmt->execute([':pid' => $projectId]);
+    $tasks = $tasksStmt->fetchAll();
+    
+    $subStmt = $pdo->prepare('SELECT id, main_task_id, name, user_id, duration_days, position FROM subtasks WHERE main_task_id = :mtid ORDER BY position ASC');
+    foreach ($tasks as &$t) {
+        $subStmt->execute([':mtid' => $t['id']]);
+        $t['subtasks'] = $subStmt->fetchAll();
+    }
+    
+    return [
+        'project' => $project,
+        'users' => $users,
+        'main_tasks' => $tasks
+    ];
+}
+
+function createSnapshot(PDO $pdo, int $projectId, ?string $description = null): int {
+    $snapshot = getProjectSnapshot($pdo, $projectId);
+    if (empty($snapshot)) return 0;
+    
+    $snapshotData = json_encode($snapshot);
+    $stmt = $pdo->prepare('INSERT INTO project_snapshots (project_id, snapshot_data, created_at, description) VALUES (:pid, :data, :time, :desc)');
+    $stmt->execute([
+        ':pid' => $projectId,
+        ':data' => $snapshotData,
+        ':time' => nowIso(),
+        ':desc' => $description
+    ]);
+    
+    return (int)$pdo->lastInsertId();
+}
+
+function logEvent(PDO $pdo, int $projectId, string $eventType, string $entityType, ?int $entityId, array $changes, ?int $snapshotId = null): void {
+    $stmt = $pdo->prepare('INSERT INTO project_events (project_id, snapshot_id, event_type, entity_type, entity_id, changes, created_at) VALUES (:pid, :sid, :etype, :entype, :eid, :ch, :time)');
+    $stmt->execute([
+        ':pid' => $projectId,
+        ':sid' => $snapshotId,
+        ':etype' => $eventType,
+        ':entype' => $entityType,
+        ':eid' => $entityId,
+        ':ch' => json_encode($changes),
+        ':time' => nowIso()
+    ]);
+}
+
+function shouldCreateSnapshot(PDO $pdo, int $projectId, int $eventsSinceLastSnapshot = 0): bool {
+    // Create snapshot if:
+    // 1. No snapshots exist yet
+    // 2. More than 10 events since last snapshot
+    // 3. More than 1 hour since last snapshot
+    
+    $stmt = $pdo->prepare('SELECT created_at FROM project_snapshots WHERE project_id = :pid ORDER BY created_at DESC LIMIT 1');
+    $stmt->execute([':pid' => $projectId]);
+    $lastSnapshot = $stmt->fetch();
+    
+    if (!$lastSnapshot) {
+        return true; // First snapshot
+    }
+    
+    if ($eventsSinceLastSnapshot >= 10) {
+        return true; // Too many events
+    }
+    
+    $lastSnapshotTime = strtotime($lastSnapshot['created_at']);
+    $oneHourAgo = time() - 3600;
+    if ($lastSnapshotTime < $oneHourAgo) {
+        return true; // Too old
+    }
+    
+    return false;
+}
+
+function getEventsSinceLastSnapshot(PDO $pdo, int $projectId): int {
+    $stmt = $pdo->prepare('SELECT MAX(id) as snapshot_id FROM project_snapshots WHERE project_id = :pid');
+    $stmt->execute([':pid' => $projectId]);
+    $result = $stmt->fetch();
+    $snapshotId = $result['snapshot_id'] ?? null;
+    
+    if ($snapshotId === null) {
+        // Count all events if no snapshots
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM project_events WHERE project_id = :pid');
+        $stmt->execute([':pid' => $projectId]);
+        return (int)$stmt->fetchColumn();
+    }
+    
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM project_events WHERE project_id = :pid AND (snapshot_id IS NULL OR snapshot_id > :sid)');
+    $stmt->execute([':pid' => $projectId, ':sid' => $snapshotId]);
+    return (int)$stmt->fetchColumn();
+}
+
+function trackChange(PDO $pdo, int $projectId, string $eventType, string $entityType, ?int $entityId, array $changes, ?string $description = null): void {
+    $eventsSinceLastSnapshot = getEventsSinceLastSnapshot($pdo, $projectId);
+    $shouldSnapshot = shouldCreateSnapshot($pdo, $projectId, $eventsSinceLastSnapshot);
+    
+    $snapshotId = null;
+    if ($shouldSnapshot) {
+        $snapshotId = createSnapshot($pdo, $projectId, $description);
+    }
+    
+    logEvent($pdo, $projectId, $eventType, $entityType, $entityId, $changes, $snapshotId);
 }
 
 

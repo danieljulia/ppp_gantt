@@ -104,6 +104,24 @@
       const res = await fetch('api.php?r=delete_subtask', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       return res.json()
     },
+    async getProjectHistory(id, slug) {
+      let url = 'api.php?r=get_project_history'
+      if (slug) {
+        url += '&slug=' + encodeURIComponent(slug)
+      } else {
+        url += '&id=' + encodeURIComponent(id)
+      }
+      const res = await fetch(url)
+      return res.json()
+    },
+    async restoreSnapshot(snapshotId) {
+      const res = await fetch('api.php?r=restore_snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot_id: snapshotId })
+      })
+      return res.json()
+    },
   }
 
   const App = {
@@ -131,6 +149,9 @@
         selectedSubtaskId: null,
         editingUserId: null,
         isEditing: false,
+        showHistory: false,
+        history: null,
+        historyLoading: false,
       })
 
       function computeRowWidth(task) {
@@ -957,6 +978,53 @@
         }
       }
 
+      async function loadHistory() {
+        state.historyLoading = true
+        try {
+          const res = await api.getProjectHistory(state.projectId, state.projectSlug)
+          if (res.error) {
+            state.error = res.error
+          } else {
+            state.history = res
+          }
+        } catch (e) {
+          state.error = 'Error loading history'
+        } finally {
+          state.historyLoading = false
+        }
+      }
+
+      async function toggleHistory() {
+        state.showHistory = !state.showHistory
+        if (state.showHistory && !state.history) {
+          await loadHistory()
+        }
+      }
+
+      async function restoreFromSnapshot(snapshotId) {
+        if (!confirm('Are you sure you want to restore this snapshot? This will replace all current project data.')) {
+          return
+        }
+        try {
+          const res = await api.restoreSnapshot(snapshotId)
+          if (res.error) {
+            alert('Error restoring snapshot: ' + res.error)
+          } else {
+            alert('Snapshot restored successfully!')
+            state.showHistory = false
+            await loadProject()
+            await loadHistory()
+          }
+        } catch (e) {
+          alert('Error restoring snapshot')
+        }
+      }
+
+      function formatDate(dateStr) {
+        const d = dayjs(dateStr)
+        return d.format('MMM D, YYYY [at] h:mm A')
+      }
+
       return {
         state,
         computeRowWidth,
@@ -997,6 +1065,10 @@
         subtaskDragOccurred: () => subtaskDragOccurred,
         justDraggedSubtaskId: () => justDraggedSubtaskId,
         submitPassword,
+        toggleHistory,
+        loadHistory,
+        restoreFromSnapshot,
+        formatDate,
         DAY_PX,
         WEEK_PX: 7 * DAY_PX, // 7 days * 24px = 168px per week
       }
@@ -1018,21 +1090,22 @@
               <label class="muted">Start</label>
               <input v-if="state.project" type="date" :value="state.project.start_date" @change="onProjectDateChange" :disabled="!state.isEditing" />
             </div>
-          <div class="users">
-            <span class="muted">Users</span>
-            <template v-for="u in state.users" :key="u.id">
-              <span class="user-pill" :class="{ editing: state.editingUserId === u.id }" @click="state.isEditing && startEditingUser(u.id)">
-                <input v-if="state.isEditing && state.editingUserId === u.id" type="color" :value="u.color" @change="e=>updateUser(u,'color',e.target.value)" @click.stop />
-                <span v-else class="user-color-preview" :style="{ background: u.color }"></span>
-                <input v-if="state.isEditing && state.editingUserId === u.id" type="text" :value="u.name" @change="e=>updateUser(u,'name',e.target.value)" @blur="stopEditingUser" @keyup.enter="stopEditingUser" @click.stop />
-                <span v-else class="user-name">{{ u.name }}</span>
-                <button v-if="state.isEditing" class="btn delete-user-btn" @click.stop="()=>deleteUser(u)">×</button>
-              </span>
-            </template>
-            <button v-if="state.isEditing" class="btn" @click="addUser">+ Add user</button>
-            <button class="btn" @click="toggleEditing">{{ state.isEditing ? 'Done' : 'Edit' }}</button>
+            <div class="users">
+              <span class="muted">Users</span>
+              <template v-for="u in state.users" :key="u.id">
+                <span class="user-pill" :class="{ editing: state.editingUserId === u.id }" @click="state.isEditing && startEditingUser(u.id)">
+                  <input v-if="state.isEditing && state.editingUserId === u.id" type="color" :value="u.color" @change="e=>updateUser(u,'color',e.target.value)" @click.stop />
+                  <span v-else class="user-color-preview" :style="{ background: u.color }"></span>
+                  <input v-if="state.isEditing && state.editingUserId === u.id" type="text" :value="u.name" @change="e=>updateUser(u,'name',e.target.value)" @blur="stopEditingUser" @keyup.enter="stopEditingUser" @click.stop />
+                  <span v-else class="user-name">{{ u.name }}</span>
+                  <button v-if="state.isEditing" class="btn delete-user-btn" @click.stop="()=>deleteUser(u)">×</button>
+                </span>
+              </template>
+              <button v-if="state.isEditing" class="btn" @click="addUser">+ Add user</button>
+              <button class="btn" @click="toggleHistory">History</button>
+              <button class="btn" @click="toggleEditing">{{ state.isEditing ? 'Done' : 'Edit' }}</button>
+            </div>
           </div>
-        </div>
 
         <div class="gantt-wrapper" v-if="state.project">
           <div class="gantt-header-row">
@@ -1175,6 +1248,29 @@
                     </div>
                   </template>
                   <button v-if="state.isEditing" class="btn add-subtask-btn" title="Add subtask" @click="()=>addSubtask(t)" :style="{ position: 'absolute', left: computeAddButtonLeft(t) + 'px', top: '50%', transform: 'translateY(-50%)' }">+</button>
+                </div>
+            </div>
+          </div>
+        </div>
+        </div>
+        
+        <!-- History Modal -->
+        <div v-if="state.showHistory" class="history-modal" @click.self="state.showHistory = false">
+          <div class="history-panel">
+            <div class="history-header">
+              <h2>Project History</h2>
+              <button class="btn" @click="state.showHistory = false">×</button>
+            </div>
+            <div class="history-content">
+              <div v-if="state.historyLoading">Loading history...</div>
+              <div v-else-if="state.history">
+                <div v-if="state.history.snapshots.length === 0" class="history-empty">No snapshots yet</div>
+                <div v-for="snapshot in state.history.snapshots" :key="snapshot.id" class="history-item snapshot-item">
+                  <div class="history-item-info">
+                    <div class="history-item-title">{{ snapshot.description || 'Snapshot' }}</div>
+                    <div class="history-item-date">{{ formatDate(snapshot.created_at) }}</div>
+                  </div>
+                  <button class="btn" @click="restoreFromSnapshot(snapshot.id)">Restore</button>
                 </div>
               </div>
             </div>
