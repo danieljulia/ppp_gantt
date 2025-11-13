@@ -1025,6 +1025,7 @@
         return d.format('MMM D, YYYY [at] h:mm A')
       }
 
+
       return {
         state,
         computeRowWidth,

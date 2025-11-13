@@ -770,3 +770,94 @@ html, body {
 .history-item button {
   margin-left: 10px;
 }
+
+/* Print styles */
+@media print {
+  /* Hide edit controls and buttons */
+  .btn,
+  .add-subtask-btn,
+  .row-actions,
+  .add-task-btn-header,
+  .drag-handle,
+  .subtask-reorder-handle,
+  .row-move-handle,
+  .resizer,
+  .delete-user-btn,
+  .history-modal {
+    display: none !important;
+  }
+
+  /* Hide password prompt and loading states */
+  .password-prompt,
+  .password-error {
+    display: none !important;
+  }
+
+  /* Make project name non-editable in print */
+  .project-name {
+    contenteditable: false !important;
+    border: none !important;
+    outline: none !important;
+  }
+
+  /* Style date input to look like text in print */
+  .topbar input[type="date"] {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: textfield !important;
+  }
+
+  /* Ensure proper page setup */
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  /* Remove padding from app container */
+  #app {
+    padding: 0 !important;
+  }
+
+  /* Ensure gantt chart fits on page */
+  .gantt-wrapper {
+    overflow: visible !important;
+    border: 1px solid #000 !important;
+    page-break-inside: avoid;
+  }
+
+  /* Ensure rows don't break across pages */
+  .gantt-row {
+    page-break-inside: avoid;
+  }
+
+  /* Make sure colors print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Ensure background colors print */
+  .bar,
+  .user-color-preview,
+  .user-initial-badge {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Hide scrollbars */
+  .gantt-wrapper {
+    overflow: visible !important;
+  }
+
+  /* Ensure sticky elements work in print */
+  .gantt-header-row,
+  .gantt-header-left,
+  .gantt-row-left {
+    position: relative !important;
+  }
+}
